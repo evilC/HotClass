@@ -462,7 +462,7 @@ Class HotClass {
 		Return DllCall("UnhookWindowsHookEx", "Uint", hHook)
 	}
 
-	_CallNextHookEx(nCode, wParam, lParam, hHook = 0){
+	_CallNextHookEx(nCode, wParam, lParam, hHook := 0){
 		Return DllCall("CallNextHookEx", "Uint", hHook, "int", nCode, "Uint", wParam, "Uint", lParam)
 	}
 
