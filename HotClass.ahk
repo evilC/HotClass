@@ -97,23 +97,24 @@ class HotClass{
 				out := ", ADDED " this._HeldKeys.length() " key combo hotkey"
 				currentlength := 0
 				count := 0
-				this._HotkeyCache := []
+				
+				; find longest hotkey length
 				for name, hk in this._Hotkeys {
 					count++
-					if (hk.length() > currentlength){
-						currentlength := hk.length()
+					if (hk.Value.length() > currentlength){
+						currentlength := hk.Value.length()
 					}
 				}
-				hotkeys := this._Hotkeys.clone()
+				this._HotkeyCache := []
+				; Sort backwards
 				while (Count){
-					for name, hotkey in hotkeys {
-						if (hotkey.length() = currentlength){
-							;this._HotkeyCache.push({name: name, hotkey: hotkey})
+					for name, hotkey in this._Hotkeys {
+						if (hotkey.Value.length() = currentlength){
 							this._HotkeyCache.push(hotkey)
-							hotkeys.Remove(name)
 							Count--
 						}
 					}
+					currentlength--
 				}
 				;OutputDebug % "Hotkey Type: " this._HotkeyCache[1].Value[1].Type
 			}
@@ -213,6 +214,7 @@ class HotClass{
 						tt .= "`n" name " DOWN"
 						this._ActiveHotkeys[name] := this._HotkeyCache[hk].Value
 						this._HotkeyCache[hk]._Callback.(1)
+						break
 					}
 				}
 			} else {
