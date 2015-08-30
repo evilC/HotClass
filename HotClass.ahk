@@ -13,9 +13,19 @@ GuiClose:
 class MyClass {
 	__New(){
 		this.HotClass := new HotClass()
-		this.HotClass.AddHotkey("hk1")
-		this.HotClass.AddHotkey("hk2")
+		this.HotClass.AddHotkey("hk1", this.hk1Pressed.Bind(this), "w300 xm")
+		this.HotClass.AddHotkey("hk2", this.hk2Pressed.Bind(this), "w300 xm")
 		Gui, Show, x0 y0
+	}
+	
+	; called when hk1 goes up or down.
+	hk1Pressed(event){
+		ToolTip % "HK1 " event, 0,200, 1
+	}
+	
+	; called when hk2 goes up or down.
+	hk2Pressed(event){
+		ToolTip % "HK2 " event, 0,220, 2
 	}
 }
 
@@ -74,7 +84,7 @@ class HotClass{
 			this._Hotkeys := {}						; a name indexed array of hotkey objects
 			this._HeldKeys := []					; The keys that are currently held
 			this._ActiveHotkeys := []				; Hotkeys which are currently in a down state
-			OutputDebug % "ENTERED IDLE STATE"
+			;OutputDebug % "ENTERED IDLE STATE"
 			return 1
 		} else if (state == this.STATES.ACTIVE ){
 			; Enter ACTIVE state, no args required
@@ -103,13 +113,13 @@ class HotClass{
 						}
 					}
 				}
-				OutputDebug % "Hotkey Type: " this._HotkeyCache[1].Value[1].Type
+				;OutputDebug % "Hotkey Type: " this._HotkeyCache[1].Value[1].Type
 			}
 			this.CInputDetector.EnableHooks()
 			this._HeldKeys := []
 			this._ActiveHotkeys := {}
 			this._State := state
-			OutputDebug % "ENTERED ACTIVE STATE" out
+			;OutputDebug % "ENTERED ACTIVE STATE" out
 			return 1
 		} else if (state == this.STATES.BIND ){
 			; Enter BIND state.
@@ -119,7 +129,7 @@ class HotClass{
 				this._HeldKeys := []
 				this._BindName := args[1]
 				this._State := state
-				OutputDebug % "ENTERED BINDING STATE FOR HOTKEY NAME: " args[1]
+				;OutputDebug % "ENTERED BINDING STATE FOR HOTKEY NAME: " args[1]
 				return 1
 			}
 		}
@@ -141,25 +151,31 @@ class HotClass{
 	Repro:
 	Bindings of A and A+B. Hold B, then hit A. A triggers as well as A+B
 	A should not trigger as it is "shorter" than A+B
+	
+	Bug: Both hotkeys to not trigger up event when held and released in certain sequence
+	Repro: Bind A, Lshift+A (Be sure to hold shift before A), Hold LShift, Hold A (Both Trigger). Release A (Only A goes up)
+	LShift+A should go up, as it no longer matches
 	*/
 	_ProcessInput(keyevent){
 		static state := {0: "U", 1: "D"}
 		; Update list of held keys, filter repeat events
 		if (keyevent.event){
-			; down event
+			; Down event - add keys.
 			if (this._CompareHotkeys([keyevent], this._HeldKeys)){
 				; repeat down event
 				return 0
 			}
 			this._HeldKeys.push(keyevent)
 		} else if (this._State != this.STATES.BIND) {
-			; up event, but not in bind state
+			; Up Event - remove keys
+			; In Bind mode, an up event triggers the end of binding.
+			; Therefore, do not remove the key from _HeldKeys that triggered the end (it's one of the bound keys).
 			pos := this._CompareHotkeys([keyevent], this._HeldKeys)
 			if (pos){
 				this._HeldKeys.Remove(pos)
 			}
 		}
-		OutputDebug % "EVENT: " this._RenderHotkey(keyevent) " " state[keyevent.event]
+		;OutputDebug % "EVENT: " this._RenderHotkey(keyevent) " " state[keyevent.event]
 		if (this._State == this.STATES.BIND){
 			; Bind mode - block all input and build up a list of held keys
 			if (keyevent.event = 1){
@@ -168,8 +184,6 @@ class HotClass{
 					fn := this._FuncEscTimer
 					SetTimer, % fn, -1000
 				}
-				; Down event - add pressed key to list of held keys
-				;this._HeldKeys.push(keyevent)
 			} else {
 				; Up event in bind mode - state change from bind mode to normal mode
 				if (keyevent.Type = "k" && keyevent.Code == 1){
@@ -192,56 +206,38 @@ class HotClass{
 			; ACTIVE state - aka "Normal Operation". Trigger hotkey callbacks as appropriate
 			tt := ""
 			if (keyevent.event = 1){
-				; As each key goes down, add it to the list of held keys
-			
-				; Check the bound hotkeys (longest to shortest) to check if there is a match
-			
-				; down event
-				;this._HeldKeys.push(keyevent)
-				;OutputDebug % "Adding to list of held keys: " keyevent.joyid keyevent.type keyevent.Code ". Now " this._HeldKeys.length() " held keys"
-
+				; Down event in ACTIVE state
 				; Check list of bound hotkeys for matches.
+				; List must be indexed LONGEST (most keys in combination) to SHORTEST (least keys in combination) to ensure correct behavior
+				; ie if CTRL+A and A are both bound, pressing CTRL+A should match CTRL+A before A.
 				Loop % this._HotkeyCache.length(){
 					hk := A_Index
 					; Supress Repeats - eg if A is bound, and A is held, do not fire A again if B is pressed.
-					match := this._CompareHotkeys(this._HotkeyCache[hk].Value, this._HeldKeys)
-					if (match){
+					if (this._CompareHotkeys(this._HotkeyCache[hk].Value, this._HeldKeys)){
 						name := this._HotkeyCache[hk].name
 						;SoundBeep, 1000, 150
 						tt .= "`n" name " DOWN"
-						;OutputDebug % "TRIGGER DOWN: " name
-						;this._ActiveHotkeys[name] := 1
 						this._ActiveHotkeys[name] := this._HotkeyCache[hk].Value
+						this._HotkeyCache[hk]._Callback.(1)
 					}
 				}
-				; List must be indexed LONGEST (most keys in combination) to SHORTEST (least keys in combination) to ensure correct behavior
-				; ie if CTRL+A and A are both bound, pressing CTRL+A should match CTRL+A before A.
 			} else {
-				;OutputDebug % "Release: comparing " keyevent.joyid keyevent.type keyevent.Code " against " this._HeldKeys.length() " held keys."
-				;pos := this._CompareHotkeys([keyevent], this._HeldKeys)
-				;if (pos){
-				;	this._HeldKeys.Remove(pos)
-				;	;OutputDebug % "Removing item " pos " from list: " keyevent.joyid keyevent.type keyevent.Code ". Now " this._HeldKeys.length() " held keys"
-				;}
-				;OutputDebug % "Checking " this._ActiveHotkeys.length() " active hotkeys..."
+				; Up event in ACTIVE state - check active hotkeys for release
 				for name, hotkey in this._ActiveHotkeys {
-					match := 0
-					;OutputDebug % "Checking if active hotkey " name " should be released"
-					if (!this._CompareHotkeys(this._Hotkeys[name].Value, this._HeldKeys)){
-						match := 1
-					}
-					if (match){
-						;OutputDebug % "TRIGGER UP: " name
+					;if (!this._CompareHotkeys(this._Hotkeys[name].Value, this._HeldKeys)){
+					if (!this._CompareHotkeys(this._ActiveHotkeys[name], this._HeldKeys)){
+						OutputDebug % "TRIGGER UP: " name
 						this._ActiveHotkeys.Remove(name)
 						;SoundBeep, 500, 150
 						tt .= "`n" name " UP"
+						this._Hotkeys[name]._Callback.(0)
 					}
 				}
 			}
 			;out .=  " Now " this._HeldKeys.length() " keys"
 		}
 		OutputDebug % "HELD: " this._RenderHotkeys(this._HeldKeys) " - ACTIVE: " this._RenderNamedHotkeys(this._ActiveHotkeys)
-		ToolTip % tt
+		;ToolTip % tt
 		; Default to not blocking input
 		return 0 ; don't block input
 	}
@@ -278,9 +274,9 @@ class HotClass{
 	}
 	
 	; User command to add a new hotkey
-	AddHotkey(name){
+	AddHotkey(name, callback, aParams*){
 		; ToDo: Ensure unique name
-		this._Hotkeys[name] := new this._Hotkey(this, name)
+		this._Hotkeys[name] := new this._Hotkey(this, name, callback, aParams*)
 	}
 	
 	; Called on a Timer to detect timeout of Escape key in Bind Mode
@@ -292,26 +288,48 @@ class HotClass{
 	; Each hotkey is an instance of this class.
 	; Handles the Gui control and routing of callbacks when the hotkey triggers
 	class _Hotkey {
-		__New(handler, name){
+		static _MenuText := "Select new Binding|Toggle Wild (*) |Toggle PassThrough (~)|Remove Binding"
+		__New(handler, name, callback, aParams*){
 			this._handler := handler
-			this.name := name
+			this._Callback := callback
+			this.Name := name
 			this.BindList := {}
 			this.Value := {}		; Holds the current binding
 			
-			Gui, Add, Edit, hwndhwnd w200 xm Disabled
-			this.hEdit := hwnd
-			Gui, Add, Button, hwndhwnd xp+210, Bind
-			this.hBind := hwnd
-			fn := this._handler.ChangeState.Bind(handler, this._handler.STATES.BIND, name)
+			Gui, % "Add", ComboBox, % "hwndhwnd AltSubmit " aParams[1], % this._MenuText
+			this._hwnd := hwnd
+			this._hEdit := DllCall("GetWindow","PTR",this._hwnd,"Uint",5) ;GW_CHILD = 5
+			fn := this.OptionSelected.Bind(this)
 			GuiControl +g, % hwnd, % fn
 		}
 		
+		; An option was selected in the drop-down list
+		OptionSelected(){
+			GuiControlGet, option,, % this._hwnd
+			GuiControl, Choose, % this._hwnd, 0
+			if (option = 1){
+				this._handler.ChangeState(this._handler.STATES.BIND, this.Name)
+			} else if (option = 2){
+				;ToolTip Wild Option Changed
+				this.Wild := !this.Wild
+			} else if (option = 3){
+				;ToolTip PassThrough Option Changed
+				this.PassThrough := !this.PassThrough
+			} else if (option = 4){
+				;ToolTip Remove Binding
+				
+			}
+		}
+
+		; Setter
 		SetBinding(BindList){
+			static EM_SETCUEBANNER:=0x1501
 			this.BindList := BindList
-			GuiControl,, % this.hEdit, % this.BuildHumanReadable(BindList)
 			this.Value := BindList
+			DllCall("User32.dll\SendMessageW", "Ptr", this._hEdit, "Uint", EM_SETCUEBANNER, "Ptr", True, "WStr", this.BuildHumanReadable(BindList))
 		}
 		
+		; Builds a human readable string from a hotkey object
 		BuildHumanReadable(BindList){
 			static mouse_lookup := ["LButton", "RButton", "MButton", "XButton1", "XButton2", "WheelU", "WheelD", "WheelL", "WheelR"]
 			static pov_directions := ["U", "R", "D", "L"]
@@ -365,12 +383,12 @@ class HotClass{
 	; Debugging Renderer
 	_RenderNamedHotkeys(hk){
 		out := ""
+		ct := 1
 		for name, obj in hk {
-			ct := 1
-			out .= name ": "
 			if (ct > 1){
 				out .= " | "
 			}
+			out .= name ": "
 			out .= this._RenderHotkeys(obj)
 			ct++
 		}
