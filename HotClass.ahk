@@ -153,10 +153,6 @@ class HotClass{
 	Repro:
 	Bindings of A and A+B. Hold B, then hit A. A triggers as well as A+B
 	A should not trigger as it is "shorter" than A+B
-	
-	Bug: Both hotkeys to not trigger up event when held and released in certain sequence
-	Repro: Bind A, Lshift+A (Be sure to hold shift before A), Hold LShift, Hold A (Both Trigger). Release A (Only A goes up)
-	LShift+A should go up, as it no longer matches
 	*/
 	_ProcessInput(keyevent){
 		static state := {0: "U", 1: "D"}
@@ -216,6 +212,7 @@ class HotClass{
 					hk := A_Index
 					; Supress Repeats - eg if A is bound, and A is held, do not fire A again if B is pressed.
 					if (this._CompareHotkeys(this._HotkeyCache[hk].Value, this._HeldKeys)){
+						OutputDebug % "TRIGGER DOWN: " name
 						name := this._HotkeyCache[hk].name
 						;SoundBeep, 1000, 150
 						tt .= "`n" name " DOWN"
@@ -225,16 +222,17 @@ class HotClass{
 				}
 			} else {
 				; Up event in ACTIVE state - check active hotkeys for release
+				newhotkeys := this._ActiveHotkeys.clone()
 				for name, hotkey in this._ActiveHotkeys {
-					;if (!this._CompareHotkeys(this._Hotkeys[name].Value, this._HeldKeys)){
 					if (!this._CompareHotkeys(this._ActiveHotkeys[name], this._HeldKeys)){
 						OutputDebug % "TRIGGER UP: " name
-						this._ActiveHotkeys.Remove(name)
+						newhotkeys.Remove(name)
 						;SoundBeep, 500, 150
 						tt .= "`n" name " UP"
 						this._Hotkeys[name]._Callback.(0)
 					}
 				}
+				this._ActiveHotkeys := newhotkeys
 			}
 			;out .=  " Now " this._HeldKeys.length() " keys"
 		}
