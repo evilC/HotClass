@@ -142,14 +142,6 @@ class HotClass{
 
 	; All Input Events flow through here - ie an input device changes state
 	; Encompasses keyboard keys, mouse buttons / wheel and joystick buttons or hat directions
-	
-	/*
-	ToDo: 
-	Bug: Hotkey triggers when longer hotkey triggers
-	Repro:
-	Bindings of A and A+B. Hold B, then hit A. A triggers as well as A+B
-	A should not trigger as it is "shorter" than A+B
-	*/
 	_ProcessInput(keyevent){
 		static state := {0: "U", 1: "D"}
 		; Update list of held keys, filter repeat events
