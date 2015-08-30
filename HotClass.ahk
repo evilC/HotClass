@@ -144,11 +144,6 @@ class HotClass{
 	
 	/*
 	ToDo: 
-	Bug: Superfluous keys cause repeat of hotkey trigger
-	Repro:
-	Binding of A. Hold A (A Triggers), Hit B (A Triggers).
-	A should not trigger again, it is already in the down state.
-	
 	Bug: Hotkey triggers when longer hotkey triggers
 	Repro:
 	Bindings of A and A+B. Hold B, then hit A. A triggers as well as A+B
@@ -210,10 +205,10 @@ class HotClass{
 				; ie if CTRL+A and A are both bound, pressing CTRL+A should match CTRL+A before A.
 				Loop % this._HotkeyCache.length(){
 					hk := A_Index
+					name := this._HotkeyCache[hk].name
 					; Supress Repeats - eg if A is bound, and A is held, do not fire A again if B is pressed.
-					if (this._CompareHotkeys(this._HotkeyCache[hk].Value, this._HeldKeys)){
+					if ((!ObjHasKey(this._ActiveHotkeys, name)) && this._CompareHotkeys(this._HotkeyCache[hk].Value, this._HeldKeys)){
 						OutputDebug % "TRIGGER DOWN: " name
-						name := this._HotkeyCache[hk].name
 						;SoundBeep, 1000, 150
 						tt .= "`n" name " DOWN"
 						this._ActiveHotkeys[name] := this._HotkeyCache[hk].Value
