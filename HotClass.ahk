@@ -1,538 +1,603 @@
-; DEPENDENCIES:
-; _Struct():  https://raw.githubusercontent.com/HotKeyIt/_Struct/master/_Struct.ahk - docs: http://www.autohotkey.net/~HotKeyIt/AutoHotkey/_Struct.htm
-; sizeof(): https://raw.githubusercontent.com/HotKeyIt/_Struct/master/sizeof.ahk - docs: http://www.autohotkey.net/~HotKeyIt/AutoHotkey/sizeof.htm
-; WinStructs: https://github.com/ahkscript/WinStructs
-
-#include <_Struct>
-#include <WinStructs>
-/*
-ToDo:
-* Per-App settings
-* _StateIndex, _Bindings dynamic properties - set 0 on unset.
-* HID input for joystick support
-* Allow removal of bindings
-* Sanity check bindings on add (duplicates, impossible keys etc)
-* Binding GUI Item?
-
-Bugs:
-* Win does not work as a modifier, but does as an end key !?
-
-*/
+; Proof of concept for replacement for HotClass
+OutputDebug, DBGVIEWCLEAR
+;============================================================================================================
+; Example user script
+;============================================================================================================
 #SingleInstance force
-OnExit, GuiClose
+mc := new MyClass()
+return
 
-HKHandler := new HotClass()
-
-;fn := Bind("AsynchBeep", 1000)
-;HKHandler.Add({type: HotClass.INPUT_TYPE_K, input: GetKeyVK("a"), modifiers: [{type: HotClass.INPUT_TYPE_K, input: GetKeyVK("ctrl")}], callback: fn, modes: {passthru: 0, wild: 1}, event: 1})
-;fn := Bind("AsynchBeep", 500)
-;HKHandler.Add({type: HotClass.INPUT_TYPE_K, input: GetKeyVK("a"), modifiers: [{type: HotClass.INPUT_TYPE_K, input: GetKeyVK("ctrl")},{type: HotClass.INPUT_TYPE_K, input: GetKeyVK("shift")}], callback: fn, modes: {passthru: 0}, event: 1})
-
-mc := new CMainClass()
-
-Return
-
-F12::
-	while (GetKeyState("F12", "P")){
-		Sleep 20
-	}
-	HKHandler.Bind("BindingDetected")
-	return
-
-
-; Test Bind ended
-; data holds information about the key that triggered exit of Bind Mode
-BindingDetected(binding, data){
-	global HKHandler
-	human_readable := HKHandler.GetBindingHumanReadable(binding, data)
-	s := "You Hit " human_readable.endkey
-	if (human_readable.modifiers){
-		s .= " while holding " human_readable.modifiers
-	}
-	ClipBoard := s
-	msgbox % s
-}
-
-Esc::ExitApp
 GuiClose:
-ExitApp
+	ExitApp
 
-; Asynchronous Beeps for debugging or notification
-AsynchBeep(freq){
-	fn := Bind("Beep",freq)
-	; Kick off another thread and continue execution.
-	SetTimer, % fn, -0
-}
-
-Beep(freq){
-	Soundbeep % freq, 250	
-}
-
-; Test functionality when callback bound to a class method
-Class CMainClass {
+class MyClass {
 	__New(){
-		global HKHandler
-		fn := Bind(this.DownEvent, this)
-		HKHandler.Add({type: INPUT_TYPE_K, input: GetKeyVK("b"), modifiers: [], callback: fn, modes: {passthru: 1}, event: 1})
-	}
-	
-	DownEvent(){
-		AsynchBeep(750)
+		this.HotClass := new HotClass()
+		this.HotClass.AddHotkey("hk1")
+		this.HotClass.AddHotkey("hk2")
+		Gui, Show, x0 y0
 	}
 }
 
-; Test script end ==============================
+;============================================================================================================
+; Libraries
+;============================================================================================================
 
-; Only ever instantiate once!
-Class HotClass {
-	_Bindings := []				; Holds list of bindings
-	_BindMode := 0				; Whether we are currently making a binding or not
-	_StateIndex := []			; State of inputs as of last event
-	_BindModeCallback := 0		; Callback for BindMode
-	_MAPVK_VSC_TO_VK := {}		; Holds lookup table for left / right handed keys (eg lctrl/rctrl) to common version (eg ctrl)
-	_MAPVK_VK_TO_VSC := {}		; Lookup table for going the other way
-	_MapTypes := { 0:"_MAPVK_VK_TO_VSC", 1:"_MAPVK_VSC_TO_VK"}	; VK to Scancode Lookup tables.
+;------------------------------------------------------------------------------------------------------------
+; Class that manages ALL hotkeys for the script
+;------------------------------------------------------------------------------------------------------------
+class HotClass{
+	#MaxThreadsPerHotkey 256	; required for joystick input as (8 * 32) hotkeys are declared to watch for button down events.
 	
-	static INPUT_TYPE_M := 0, INPUT_TYPE_K := 1, INPUT_TYPE_O := 2
-	static MOUSE_WPARAM_LOOKUP := {0x201: 1, 0x202: 1, 0x204: 2, 0x205: 2, 0x207: 3, 0x208: 3, 0x20A: 6, 0x20E: 7} ; No XButton 2 lookup as it lacks a unique wParam
-	static MOUSE_NAME_LOOKUP := {LButton: 1, RButton: 2, MButton: 3, XButton1: 4, XButton2: 5, Wheel: 6, Tilt: 7}
-	static MOUSE_BUTTON_NAMES := ["LButton", "RButton", "MButton", "XButton1", "XButton2", "MWheel", "MTilt"]
-	static INPUT_TYPES := {0: "Mouse", 1: "Keyboard", 2: "Other"}
+	; Constructor
+	; startactive param decides 
+	__New(options := 0){
+		this.STATES := {IDLE: 0, ACTIVE: 1, BIND: 2}		; State Name constants, for human readibility
+		this._HotkeyCache := []
+		this._ActiveHotkeys := []
+		this._FuncEscTimer := this._EscTimer.Bind(this)
 
-
-	; USER METHODS ================================================================================================================================
-	; Stuff intended for everyday use by people using the class.
-	
-	; Add a binding. Input format is basically the same as the _Bindings data structure. See Docs\Bindings Structure.json
-	Add(obj){
-		;return new this._Binding(this,obj)
-		this._Bindings.Insert(obj)
-	}
-	
-	; Request a binding.
-	; Returns 1 for OK, you have control of binding system, 0 for no.
-	Bind(callback){
-		; ToDo: need good way if check if valid callback
-		if (this.BindMode || callback = ""){
-			return 0
+		; Set default options
+		if (!IsObject(options) || options == 0){
+			options := {StartActive: 1}
 		}
-		this._BindModeCallback := callback
-		this._DetectBinding()
-		return 1
-	}
-	
-	; Converts an Input to a human readable format.
-	GetInputHumanReadable(type, code) {
-		if (type = HotClass.INPUT_TYPE_K){
-			vk := Format("{:x}",code)
-			keyname := GetKeyName("vk" vk)
-		} else if (type = HotClass.INPUT_TYPE_M){
-			keyname := HotClass.MOUSE_BUTTON_NAMES[code]
+		
+		; Initialize the Library that detects input.
+		this.CInputDetector := new CInputDetector(this._ProcessInput.Bind(this))
+
+		; Initialize state
+		if (options.StartActive){
+			this.ChangeState(this.STATES.ACTIVE)
+		} else {
+			this.ChangeState(this.STATES.IDLE)
 		}
-		StringUpper, keyname, keyname
-		return keyname
+		
 	}
 	
-	; Converts a Binding, data pair into a human readable endkey and modifier strings
-	GetBindingHumanReadable(binding, data) {
-		endkey := this.GetInputHumanReadable(data.type, data.input.vk)	; ToDo: fix for stick?
-		if (this.IsWheelType(data)){
-			; Mouse wheel cannot be a modifier, as it releases immediately
-			if (data.event < 0){
-				endkey .= "_U"
-			} else {
-				endkey .= "_D"
+	; Handles all state transitions
+	; Returns 1 if we transitioned to the specified state, 0 if not
+	ChangeState(state, args*){
+		if (state == this._State){
+			return 1
+		}
+		if (!ObjHasKey(this, "_State")){
+			; Initialize state
+			this._State := this.STATES.IDLE			; Set state to IDLE
+		}
+		
+		; Decide what to do, based upon state we wish to transition to
+		if (state == this.STATES.IDLE){
+			; Go idle / initialize, no args required
+			this.CInputDetector.DisableHooks()
+			this._State := state
+			this._BindName := ""					; The name of the hotkey that is being bound
+			this._Hotkeys := {}						; a name indexed array of hotkey objects
+			this._HeldKeys := []					; The keys that are currently held
+			this._ActiveHotkeys := []				; Hotkeys which are currently in a down state
+			OutputDebug % "ENTERED IDLE STATE"
+			return 1
+		} else if (state == this.STATES.ACTIVE ){
+			; Enter ACTIVE state, no args required
+			out := ""
+			if (this._State == this.STATES.BIND){
+				; Transition from BIND state
+				; Build size-ordered list of hotkeys
+				out := ", ADDED " this._HeldKeys.length() " key combo hotkey"
+				currentlength := 0
+				count := 0
+				this._HotkeyCache := []
+				for name, hk in this._Hotkeys {
+					count++
+					if (hk.length() > currentlength){
+						currentlength := hk.length()
+					}
+				}
+				hotkeys := this._Hotkeys.clone()
+				while (Count){
+					for name, hotkey in hotkeys {
+						if (hotkey.length() = currentlength){
+							;this._HotkeyCache.push({name: name, hotkey: hotkey})
+							this._HotkeyCache.push(hotkey)
+							hotkeys.Remove(name)
+							Count--
+						}
+					}
+				}
+				OutputDebug % "Hotkey Type: " this._HotkeyCache[1].Value[1].Type
+			}
+			this.CInputDetector.EnableHooks()
+			this._HeldKeys := []
+			this._ActiveHotkeys := {}
+			this._State := state
+			OutputDebug % "ENTERED ACTIVE STATE" out
+			return 1
+		} else if (state == this.STATES.BIND ){
+			; Enter BIND state.
+			; args[1] = name of hotkey requesting state change
+			this.CInputDetector.EnableHooks()
+			if (args.length()){
+				this._HeldKeys := []
+				this._BindName := args[1]
+				this._State := state
+				OutputDebug % "ENTERED BINDING STATE FOR HOTKEY NAME: " args[1]
+				return 1
 			}
 		}
-		modifiers := ""
-		count := 0
-		Loop 2 {
-			t := A_Index - 1
-			for key, value in binding[t] {
-				if (t = data.type && key = data.input.vk){
-					; this is the end key - skip
-					continue
+		; Default to Fail
+		return 0
+	}
+
+	; All Input Events flow through here - ie an input device changes state
+	; Encompasses keyboard keys, mouse buttons / wheel and joystick buttons or hat directions
+	
+	/*
+	ToDo: 
+	Bug: Superfluous keys cause repeat of hotkey trigger
+	Repro:
+	Binding of A. Hold A (A Triggers), Hit B (A Triggers).
+	A should not trigger again, it is already in the down state.
+	
+	Bug: Hotkey triggers when longer hotkey triggers
+	Repro:
+	Bindings of A and A+B. Hold B, then hit A. A triggers as well as A+B
+	A should not trigger as it is "shorter" than A+B
+	*/
+	_ProcessInput(keyevent){
+		static state := {0: "U", 1: "D"}
+		; Update list of held keys, filter repeat events
+		if (keyevent.event){
+			; down event
+			if (this._CompareHotkeys([keyevent], this._HeldKeys)){
+				; repeat down event
+				return 0
+			}
+			this._HeldKeys.push(keyevent)
+		} else if (this._State != this.STATES.BIND) {
+			; up event, but not in bind state
+			pos := this._CompareHotkeys([keyevent], this._HeldKeys)
+			if (pos){
+				this._HeldKeys.Remove(pos)
+			}
+		}
+		OutputDebug % "EVENT: " this._RenderHotkey(keyevent) " " state[keyevent.event]
+		if (this._State == this.STATES.BIND){
+			; Bind mode - block all input and build up a list of held keys
+			if (keyevent.event = 1){
+				if (keyevent.Type = "k" && keyevent.Code == 1){
+					; Escape down - start timer to detect hold of escape to quit
+					fn := this._FuncEscTimer
+					SetTimer, % fn, -1000
 				}
-				if (count){
-					modifiers .= " + "
+				; Down event - add pressed key to list of held keys
+				;this._HeldKeys.push(keyevent)
+			} else {
+				; Up event in bind mode - state change from bind mode to normal mode
+				if (keyevent.Type = "k" && keyevent.Code == 1){
+					; Escape up - stop timer to detect hold of escape to quit
+					fn := this._FuncEscTimer
+					SetTimer, % fn, Off
 				}
-				modifiers .= this.GetInputHumanReadable(t,key)
-				count++
+				
+				;ToDo: Check if hotkey is duplicate, and if so, reject.
+				
+				; set state of hotkey class
+				this._Hotkeys[this._BindName].SetBinding(this._HeldKeys)
+				
+				; Trigger state change
+				this.ChangeState(this.STATES.ACTIVE)
+
+			}
+			return 1 ; block input
+		} else if (this._State == this.STATES.ACTIVE){
+			; ACTIVE state - aka "Normal Operation". Trigger hotkey callbacks as appropriate
+			tt := ""
+			if (keyevent.event = 1){
+				; As each key goes down, add it to the list of held keys
+			
+				; Check the bound hotkeys (longest to shortest) to check if there is a match
+			
+				; down event
+				;this._HeldKeys.push(keyevent)
+				;OutputDebug % "Adding to list of held keys: " keyevent.joyid keyevent.type keyevent.Code ". Now " this._HeldKeys.length() " held keys"
+
+				; Check list of bound hotkeys for matches.
+				Loop % this._HotkeyCache.length(){
+					hk := A_Index
+					; Supress Repeats - eg if A is bound, and A is held, do not fire A again if B is pressed.
+					match := this._CompareHotkeys(this._HotkeyCache[hk].Value, this._HeldKeys)
+					if (match){
+						name := this._HotkeyCache[hk].name
+						;SoundBeep, 1000, 150
+						tt .= "`n" name " DOWN"
+						;OutputDebug % "TRIGGER DOWN: " name
+						;this._ActiveHotkeys[name] := 1
+						this._ActiveHotkeys[name] := this._HotkeyCache[hk].Value
+					}
+				}
+				; List must be indexed LONGEST (most keys in combination) to SHORTEST (least keys in combination) to ensure correct behavior
+				; ie if CTRL+A and A are both bound, pressing CTRL+A should match CTRL+A before A.
+			} else {
+				;OutputDebug % "Release: comparing " keyevent.joyid keyevent.type keyevent.Code " against " this._HeldKeys.length() " held keys."
+				;pos := this._CompareHotkeys([keyevent], this._HeldKeys)
+				;if (pos){
+				;	this._HeldKeys.Remove(pos)
+				;	;OutputDebug % "Removing item " pos " from list: " keyevent.joyid keyevent.type keyevent.Code ". Now " this._HeldKeys.length() " held keys"
+				;}
+				;OutputDebug % "Checking " this._ActiveHotkeys.length() " active hotkeys..."
+				for name, hotkey in this._ActiveHotkeys {
+					match := 0
+					;OutputDebug % "Checking if active hotkey " name " should be released"
+					if (!this._CompareHotkeys(this._Hotkeys[name].Value, this._HeldKeys)){
+						match := 1
+					}
+					if (match){
+						;OutputDebug % "TRIGGER UP: " name
+						this._ActiveHotkeys.Remove(name)
+						;SoundBeep, 500, 150
+						tt .= "`n" name " UP"
+					}
+				}
+			}
+			;out .=  " Now " this._HeldKeys.length() " keys"
+		}
+		OutputDebug % "HELD: " this._RenderHotkeys(this._HeldKeys) " - ACTIVE: " this._RenderNamedHotkeys(this._ActiveHotkeys)
+		ToolTip % tt
+		; Default to not blocking input
+		return 0 ; don't block input
+	}
+	
+	; All of needle must be in haystack
+	_CompareHotkeys(needle, haystack){
+		length := needle.length()
+		Count := 0
+		; Loop through elements of the needle
+		Loop % length {
+			ni := A_Index
+			; Loop through the haystack to see if this item is present
+			Loop % haystack.length() {
+				hi := A_Index
+				n := needle[ni].joyid needle[ni].type needle[ni].Code
+				h := haystack[hi].joyid haystack[hi].type haystack[hi].Code
+				;out := n " = " h " ? "
+				if (n = h){
+					;OutputDebug % out "YES"
+					count++
+					if (Count = length){
+						break
+					}
+				} else {
+					;OutputDebug % out "NO"
+				}
 			}
 		}
 		
-		return {endkey: endkey, modifiers: modifiers}
-	}
-	
-	; Adds the "common variant" (eg Ctrl) to ONE left/right variant (eg LCtrl) in a State object
-	; ScanCode as input
-	StateObjAddCommonVariant(obj, state, vk, sc := 0){
-		translated_vk := this._MapVirtualKeyEx(sc)
-		if ( translated_vk && (translated_vk != vk) ){
-			; Has a left / right variant
-			obj[HotClass.INPUT_TYPE_K][translated_vk] := state
-			return 1
+		if (Count = length){
+			return hi
 		}
 		return 0
 	}
 	
-	; Removes a "Common Variant" (eg Ctrl) from ALL left/right variants (eg Lctrl) in a State object
-	; Does not alter the object passed in, returns the new object out.
-	StateObjRemoveCommonVariants(obj, data){
-		; ToDo: Mouse, stick etc.
-		out := {}
-		s := ""
-		for key, value in obj {
-			out[key] := value	; add branch on
-			; If this is a left / right version of a key, remove it
-			; Convert VK into left / right indistinguishable SC
-			res := this._MapVirtualKeyEx(key,0)
-			; Convert non left/right sensitve SC back to VK
-			res := this._MapVirtualKeyEx(res,1)
+	; User command to add a new hotkey
+	AddHotkey(name){
+		; ToDo: Ensure unique name
+		this._Hotkeys[name] := new this._Hotkey(this, name)
+	}
+	
+	; Called on a Timer to detect timeout of Escape key in Bind Mode
+	_EscTimer(){
+		this._BindList := {}
+		this.ChangeState(this.STATES.ACTIVE)
+	}
+	
+	; Each hotkey is an instance of this class.
+	; Handles the Gui control and routing of callbacks when the hotkey triggers
+	class _Hotkey {
+		__New(handler, name){
+			this._handler := handler
+			this.name := name
+			this.BindList := {}
+			this.Value := {}		; Holds the current binding
 			
-			if (data.type = HotClass.INPUT_TYPE_K){
-				; End key is keyboard - Find "Common" version for end key
-				ekc := this._MapVirtualKeyEx(data.input.vk,0)
-				ekc := this._MapVirtualKeyEx(ekc,1)
-				is_end_key := ( ekc = key  )
-			} else {
-				is_end_key := 0
-			}
+			Gui, Add, Edit, hwndhwnd w200 xm Disabled
+			this.hEdit := hwnd
+			Gui, Add, Button, hwndhwnd xp+210, Bind
+			this.hBind := hwnd
+			fn := this._handler.ChangeState.Bind(handler, this._handler.STATES.BIND, name)
+			GuiControl +g, % hwnd, % fn
+		}
+		
+		SetBinding(BindList){
+			this.BindList := BindList
+			GuiControl,, % this.hEdit, % this.BuildHumanReadable(BindList)
+			this.Value := BindList
+		}
+		
+		BuildHumanReadable(BindList){
+			static mouse_lookup := ["LButton", "RButton", "MButton", "XButton1", "XButton2", "WheelU", "WheelD", "WheelL", "WheelR"]
+			static pov_directions := ["U", "R", "D", "L"]
+			static event_lookup := {0: "Release", 1: "Press"}
 			
-			; If this has left / right versions, result will be different to the original value, remove it.
-			; If this is a common version and also the end key, remove it.
-			if (res != key || is_end_key ){
-				s .= "removing " key "`n"
-				out.Remove(key)
-			} else {
-				s .= " ignoring " key "`n"
+			out := ""
+			Loop % BindList.length(){
+				if (A_Index > 1){
+					out .= " + "
+				}
+				obj := BindList[A_Index]
+				if (obj.Type = "m"){
+					; Mouse button
+					key := mouse_lookup[obj.Code]
+				} else if (obj.Type = "k") {
+					; Keyboard Key
+					key := GetKeyName(Format("sc{:x}", obj.Code))
+					if (StrLen(key) = 1){
+						StringUpper, key, key
+					}
+				} else if (obj.Type = "j") {
+					; Joystick button
+					key := obj.joyid "Joy" obj.Code
+				} else if (obj.Type = "h") {
+					; Joystick hat
+					key := obj.joyid "JoyPOV" pov_directions[obj.Code]
+				}
+				out .= key
 			}
-			;tooltip % s
+			return out
+		}
+	}
+	
+	; Debugging Renderer
+	_RenderHotkey(hk){
+		return hk.joyid hk.type hk.Code
+	}
+	
+	; Debugging Renderer
+	_RenderHotkeys(hk){
+		out := ""
+		Loop % hk.length(){
+			if (A_Index > 1){
+				out .= ","
+			}
+			out .= this._RenderHotkey(hk[A_Index])
 		}
 		return out
 	}
 	
-	; Data packet is of mouse wheel motion
-	IsWheelType(data){
-		return (data.type = HotClass.INPUT_TYPE_M) && (data.input.vk = HotClass.MOUSE_NAME_LOOKUP.Wheel)
-	}
-	
-	; Data packet is an up event for a button or a mouse wheel move (Which does not have up events)
-	IsUpEvent(data){
-		return ( !data.event || this.IsWheelType(data) )
-	}
-	
-	; INTERNAL / PRIVATE ==========================================================================================================================
-	; Anything prefixed with an underscore ( _ ) is not intended for use by end-users.
-
-	; Locks out input and prompts the user to hit the desired hotkey that they wish to bind.
-	; Terminates on key up.
-	; Returns a copy of the _StateIndex array just before the key release
-	_DetectBinding(){
-		Gui, New, HwndHwnd -Border
-		this._BindPrompt := hwnd
-		Gui, % Hwnd ":Add", Text, center w400,Please select what you would like to use for this binding`n`nCurrently, keyboard and mouse input is supported.`n`nHotkey is bound when you release the last key.
-		Gui, % Hwnd ":Show", w400
-	
-		this._BindMode := 1
-		return 1
-	}
-
-	; Up event or change happened in bind mode.
-	; _Stateindex should hold state of desired binding.
-	_BindingDetected(data){
-		Gui, % this._BindPrompt ":Destroy"
-		AsynchBeep(2000)
-		
-		; Discern End-Key from rest of State
-		; "End Pair" (state + endkey data) starts here.
-		input_state := {0: this._StateIndex[HotClass.INPUT_TYPE_M], 1: this.StateObjRemoveCommonVariants(this._StateIndex[HotClass.INPUT_TYPE_K], data) }
-		output_state := {0: {}, 1: {} }
-
-		; Walk _StateIndex and copy where button is held.
-		Loop 2 {
-			t := A_Index-1
-			s := ""
-			for key, value in input_state[t] {
-				if ( value && (value != 0) ){
-					output_state[t][key] := value
-				}
+	; Debugging Renderer
+	_RenderNamedHotkeys(hk){
+		out := ""
+		for name, obj in hk {
+			ct := 1
+			out .= name ": "
+			if (ct > 1){
+				out .= " | "
 			}
+			out .= this._RenderHotkeys(obj)
+			ct++
 		}
-		; call callback, pass _StateIndex structure
-		fn := Bind(this._BindModeCallback, output_state, data)
-		SetTimer, % fn, -0
-		return 1
+		return out
 	}
+}
 
-	; Constructor
-	__New(){
+;------------------------------------------------------------------------------------------------------------
+; Sets up the hooks etc to watch for input
+;------------------------------------------------------------------------------------------------------------
+class CInputDetector {
+	__New(callback){
+		this._HooksEnabled := 0
+		this._Callback := callback
+		
+		this.EnableHooks()
+	}
+	
+	EnableHooks(){
 		static WH_KEYBOARD_LL := 13, WH_MOUSE_LL := 14
 		
-		this._StateIndex := []
-		this._StateIndex[0] := {}
-		this._StateIndex[1] := {0x10: 0, 0x11: 0, 0x12: 0, 0x5D: 0}	; initialize modifier states
-		this._StateIndex[2] := {}
-		fn := _BindCallback(this._ProcessKHook,"Fast",,this)
-		this._hHookKeybd := this._SetWindowsHookEx(WH_KEYBOARD_LL, fn)
-		fn := _BindCallback(this._ProcessMHook,"Fast",,this)
-		this._hHookMouse := this._SetWindowsHookEx(WH_MOUSE_LL, fn)
+		if (this._HooksEnabled){
+			return 1
+		}
 		
-		;OnMessage(0x00FF, Bind(this._ProcessHID, this))
-		;this._HIDRegister()
-	}
-	
-	; Destructor
-	__Delete(){
-		;this._HIDUnRegister()
-	}
-	
-	; Muster point for processing of incoming input - ALL INPUT SHOULD ULTIMATELY ROUTE THROUGH HERE
-	; SetWindowsHookEx (Keyboard, Mouse) to route via here.
-	; HID input (eg sticks) to be routed via here too.
-	_ProcessInput(data){
-		if (data.type = HotClass.INPUT_TYPE_K || data.type = HotClass.INPUT_TYPE_M){
-			; Set _StateIndex to reflect state of key
-			; lr_variant := data.input.flags & 1	; is this the left (0) or right (1) version of this key?
-			if (data.input.vk = 65){
-				a := 1	; Breakpoint - done like this so you can hold a modifier but not break.
-			}
-			if (data.event = 0){
-				debug := "Exit Bind Mode Debug Point"
-			}
-			if ( this._BindMode && this.IsUpEvent(data) ){
-				; Key up in Bind Mode - Fire _BindingDetected before updating _StateIndex, so it sees all the keys as down.
-				; Pass data so it can see the End Key
-				this._BindingDetected(data)
-			}
-			; Update _StateIndex array
-			
-			if (data.type = HotClass.INPUT_TYPE_K){
-				this.StateObjAddCommonVariant(this._StateIndex, data.event, data.input.vk, data.input.sc)
-			}
-			this._StateIndex[data.type][data.input.vk] := data.event
-			
-			; Exit bind Mode here, so we can be sure all input generated during Bind Mode is blocked, where possible.
-			; ToDo data.event will not suffice for sticks?
-			if ( this._BindMode && this.IsUpEvent(data) ){
-				if (this.IsWheelType(data) && data.input.vk = HotClass.MOUSE_NAME_LOOKUP.Wheel){
-					; Mouse Wheel has no up event, so release it now
-					this._StateIndex[data.type][data.input.vk] := 0
-				}
-				this._BindMode := 0
-			}
-			
-			; Do not process any further in Bind Mode
-			if (this._BindMode){
-				return 1
-			}
+		this._HooksEnabled := 1
 
-			; find the total number of modifier keys currently held
-			modsheld := this._StateIndex[data.type][0x10] + this._StateIndex[data.type][0x11] + this._StateIndex[data.type][0x5D] + this._StateIndex[data.type][0x12]
-			
-			; Find best match for binding
-			best_match := {binding: 0, modcount: 0}
-			Loop % this._Bindings.MaxIndex() {
-				b := A_Index
-				if (this._Bindings[b].type = data.type && this._Bindings[b].input = data.input.vk && this._Bindings[b].event = data.event){
-					max := this._Bindings[b].modifiers.MaxIndex()
-					if (!max){	; convert "" to 0
-						max := 0
-					}
-					matched := 0
-
-					if (!ObjHasKey(this._Bindings[b].modifiers[1], "type")){
-						; If modifier array empty, match
-						max := 0
-						best_match.binding := b
-						best_match.modcount := 0
-					} else {
-						Loop % max {
-							m := A_Index
-							if (this._StateIndex[this._Bindings[b].modifiers[m].type][this._Bindings[b].modifiers[m].input]){
-								; Match on one modifier
-								matched++
-							}
-						}
-					}
-					if (matched = max){
-						; All modifiers matched - we have a candidate
-						if (best_match.modcount < max){
-							; If wild not set, check no other modifiers in addition to matched ones are set.
-							if ((modsheld = max) || this._Bindings[b].modes.wild = 1){
-								; No best match so far, or there is a match but it uses less modifiers - this is current best match
-								best_match.binding := b
-								best_match.modcount := max
-							}
-						}
-					}
+		; Hook Input
+		this._hHookKeybd := this._SetWindowsHookEx(WH_KEYBOARD_LL, RegisterCallback(this._ProcessKHook,"Fast",,&this))
+		this._hHookMouse := this._SetWindowsHookEx(WH_MOUSE_LL, RegisterCallback(this._ProcessMHook,"Fast",,&this))
+		
+		this._JoysticksWithHats := []
+		Loop 8 {
+			joyid := A_Index
+			joyinfo := GetKeyState(joyid "JoyInfo")
+			if (joyinfo){
+				; watch buttons
+				Loop % 32 {
+					fn := this._ProcessJHook.Bind(this, joyid, A_Index)
+					hotkey, % joyid "Joy" A_Index, % fn
+					hotkey, % joyid "Joy" A_Index, On
 				}
-			}
-			
-			; Decide whether to fire callback
-			if (best_match.binding){
-				; A match was found, call
-				fn := this._Bindings[best_match.binding].callback
-				; Start thread for bound func
-				SetTimer %fn%, -0
-				; Block if needed.
-				if (this._Bindings[best_match.binding].modes.passthru = 0){
-					; Block
-					return 1
+				; Watch POVs
+				if (instr(joyinfo, "p")){
+					this._JoysticksWithHats.push(joyid)
 				}
 			}
 		}
-		return 0
-	}
-
-	; Process Keyboard messages from Hooks and feed _ProcessInput
-	_ProcessKHook(nCode, wParam, lParam){
-		; KBDLLHOOKSTRUCT structure: https://msdn.microsoft.com/en-us/library/windows/desktop/ms644967%28v=vs.85%29.aspx
-		Critical
-		
-		If ((wParam = 0x100) || (wParam = 0x101)) { ; WM_KEYDOWN || WM_KEYUP
-			lp := new _Struct(WinStructs.KBDLLHOOKSTRUCT,lParam+0)
-			if (this._ProcessInput({type: HotClass.INPUT_TYPE_K, input: { vk: lp.vkCode, sc: lp.scanCode, flags: lp.flags}, event: wParam = 0x100})){
-				; Return 1 to block this input
-				; ToDo: call _ProcessInput via another thread? We only have 300ms to return 1 else it wont get blocked?
-				return 1
-			}
-		}
-		Return this._CallNextHookEx(nCode, wParam, lParam)
+		fn := this._WatchJoystickPOV.Bind(this)
+		SetTimer, % fn, 10
+		return 1
 	}
 	
-	; Process Mouse messages from Hooks and feed _ProcessInput
-	_ProcessMHook(nCode, wParam, lParam){
-		; MSLLHOOKSTRUCT structure: https://msdn.microsoft.com/en-us/library/windows/desktop/ms644970(v=vs.85).aspx
-		static WM_LBUTTONDOWN := 0x0201, WM_LBUTTONUP := 0x0202 , WM_RBUTTONDOWN := 0x0204, WM_RBUTTONUP := 0x0205, WM_MBUTTONDOWN := 0x0207, WM_MBUTTONUP := 0x0208, WM_MOUSEHWHEEL := x020E, WM_MOUSEWHEEL := 0x020A, WM_XBUTTONDOWN := 0x020B, WM_XBUTTONUP := 0x020C
-		Critical
+	DisableHooks(){
+		if (!this._HooksEnabled){
+			return 1
+		}
 		
-		; Filter out mouse move and other unwanted messages
-		If ( wParam = WM_LBUTTONDOWN || wParam = WM_LBUTTONUP || wParam = WM_RBUTTONDOWN || wParam = WM_RBUTTONUP || wParam = WM_MBUTTONDOWN || wParam = WM_MBUTTONUP || wParam = WM_MOUSEWHEEL || wParam = WM_MOUSEHWHEEL || wParam = WM_XBUTTONDOWN || wParam = WM_XBUTTONUP ) {
-			lp := new _Struct(WinStructs.MSLLHOOKSTRUCT,lParam)
-			if (wParam = WM_MOUSEWHEEL || wParam = WM_MOUSEHWHEEL){
-				mouseData := new _Struct("Short sht",lp.mouseData_high[""]).sht
+		this._HooksEnabled := 0
+
+		this._UnhookWindowsHookEx(this._hHookKeybd)
+		this._UnhookWindowsHookEx(this._hHookMouse)
+
+		this._JoysticksWithHats := []
+		Loop 8 {
+			joyid := A_Index
+			joyinfo := GetKeyState(joyid "JoyInfo")
+			if (joyinfo){
+				; stop watching buttons
+				Loop % 32 {
+					hotkey, % joyid "Joy" A_Index, Off
+				}
+			}
+		}
+		fn := this._WatchJoystickPOV.Bind(this)
+		SetTimer, % fn, Off
+		return 1
+	}
+	
+	; Process Joystick button down events
+	_ProcessJHook(joyid, btn){
+		;ToolTip % "Joy " joyid " Btn " btn
+		this._Callback.({Type: "j", Code: btn, joyid: joyid, event: 1})
+		fn := this._WaitForJoyUp.Bind(this, joyid, btn)
+		SetTimer, % fn, -0
+	}
+	
+	; Emulate up events for joystick buttons
+	_WaitForJoyUp(joyid, btn){
+		str := joyid "Joy" btn
+		while (GetKeyState(str)){
+			sleep 10
+		}
+		this._Callback.({Type: "j", Code: btn, joyid: joyid, event: 0})
+	}
+	
+	; A constantly running timer to emulate "button events" for Joystick POV directions (eg 2JoyPOVU, 2JoyPOVD...)
+	_WatchJoystickPOV(){
+		static pov_states := [-1, -1, -1, -1, -1, -1, -1, -1]
+		static pov_strings := ["1JoyPOV", "2JoyPOV", "3JoyPOV", "4JoyPOV", "5JoyPOV", "6JoyPOV" ,"7JoyPOV" ,"8JoyPOV"]
+		static pov_direction_map := [[0,0,0,0], [1,0,0,0], [1,1,0,0] , [0,1,0,0], [0,1,1,0], [0,0,1,0], [0,0,1,1], [0,0,0,1], [1,0,0,1]]
+		static pov_direction_states := [[0,0,0,0], [0,0,0,0], [0,0,0,0], [0,0,0,0], [0,0,0,0], [0,0,0,0], [0,0,0,0], [0,0,0,0]]
+		Loop % this._JoysticksWithHats.length() {
+			joyid := this._JoysticksWithHats[A_Index]
+			pov := GetKeyState(pov_strings[joyid])
+			if (pov = pov_states[joyid]){
+				; do not process stick if nothing changed
+				continue
+			}
+			if (pov = -1){
+				state := 1
 			} else {
-				mouseData := lp.mouseData_high
+				state := round(pov / 4500) + 2
 			}
-			;ToolTip % "md: " mouseData
 			
-			flags := lp.flags
+			Loop 4 {
+				if (pov_direction_states[joyid, A_Index] != pov_direction_map[state, A_Index]){
+					this._Callback.({Type: "h", Code: A_Index, joyid: joyid, event: pov_direction_map[state, A_Index]})
+				}
+			}
+			pov_states[joyid] := pov
+			pov_direction_states[joyid] := pov_direction_map[state]
+		}
+	}
+	
+	; Process Keyboard Hook messages
+	_ProcessKHook(wParam, lParam){
+		; KBDLLHOOKSTRUCT structure: https://msdn.microsoft.com/en-us/library/windows/desktop/ms644967%28v=vs.85%29.aspx
+		; KeyboardProc function: https://msdn.microsoft.com/en-us/library/windows/desktop/ms644984(v=vs.85).aspx
+		static WM_KEYDOWN := 0x100, WM_KEYUP := 0x101, WM_SYSKEYDOWN := 0x104
+		Critical
+		
+		if (this<0){
+			Return DllCall("CallNextHookEx", "Uint", Object(A_EventInfo)._hHookKeybd, "int", this, "Uint", wParam, "Uint", lParam)
+		}
+		this:=Object(A_EventInfo)
+		
+		vk := NumGet(lParam+0, "UInt")
+		Extended := NumGet(lParam+0, 8, "UInt") & 1
+		sc := (Extended<<8)|NumGet(lParam+0, 4, "UInt")
+		sc := sc = 0x136 ? 0x36 : sc
+        ;key:=GetKeyName(Format("vk{1:x}sc{2:x}", vk,sc))
+		event := wParam = WM_SYSKEYDOWN || wParam = WM_KEYDOWN
+		
+        if ( sc != 541 ){		; ignore non L/R Control. This key never happens except eg with RALT
+			block := this._Callback.({ Type: "k", Code: sc, event: event})
+			if (block){
+				return 1
+			}
+		}
+		Return DllCall("CallNextHookEx", "Uint", Object(A_EventInfo)._hHookKeybd, "int", this, "Uint", wParam, "Uint", lParam)
+
+	}
+	
+	; Process Mouse Hook messages
+	_ProcessMHook(wParam, lParam){
+		; MSLLHOOKSTRUCT structure: https://msdn.microsoft.com/en-us/library/windows/desktop/ms644970(v=vs.85).aspx
+		static WM_LBUTTONDOWN := 0x0201, WM_LBUTTONUP := 0x0202 , WM_RBUTTONDOWN := 0x0204, WM_RBUTTONUP := 0x0205, WM_MBUTTONDOWN := 0x0207, WM_MBUTTONUP := 0x0208, WM_MOUSEHWHEEL := 0x20E, WM_MOUSEWHEEL := 0x020A, WM_XBUTTONDOWN := 0x020B, WM_XBUTTONUP := 0x020C
+		static button_map := {0x0201: 1, 0x0202: 1 , 0x0204: 2, 0x0205: 2, 0x0207: 3, 0x208: 3}
+		static button_event := {0x0201: 1, 0x0202: 0 , 0x0204: 1, 0x0205: 0, 0x0207: 1, 0x208: 0}
+		Critical
+		
+		if (this<0 || wParam = 0x200){
+			Return DllCall("CallNextHookEx", "Uint", Object(A_EventInfo)._hHookMouse, "int", this, "Uint", wParam, "Uint", lParam)
+		}
+		this:=Object(A_EventInfo)
+		out := "Mouse: " wParam " "
+		
+		keyname := ""
+		event := 0
+		button := 0
+		
+		;if (IsObject(this._MouseLookup[wParam])){
+		if (ObjHasKey(button_map, wParam)){
+			; L / R / M  buttons
+			button := button_map[wParam]
+			event := button_event[wParam]
+		} else {
+			; Wheel / XButtons
+			; Find HiWord of mouseData from Struct
+			mouseData := NumGet(lParam+0, 10, "Short")
 			
-			vk := HotClass.MOUSE_WPARAM_LOOKUP[wParam]
-			if (wParam = WM_LBUTTONUP || wParam = WM_RBUTTONUP || wParam = WM_MBUTTONUP ){
-				; Normally supported up event
-				event := 0
-			} else if (wParam = WM_MOUSEWHEEL || wParam = WM_MOUSEHWHEEL) {
-				; Mouse wheel has no up event
-				vk := HotClass.MOUSE_WPARAM_LOOKUP[wParam]
-				; event = 1 for up, -1 for down
-				if (mouseData < 0){
+			if (wParam = WM_MOUSEHWHEEL || wParam = WM_MOUSEWHEEL){
+				; Mouse Wheel - mouseData indicate direction (up/down)
+				event := 1	; wheel has no up event, only down
+				if (wParam = WM_MOUSEWHEEL){
+					if (mouseData > 1){
+						button := 6
+					} else {
+						button := 7
+					}
+				} else {
+					if (mouseData < 1){
+						button := 8
+					} else {
+						button := 9
+					}
+				}
+			} else if (wParam = WM_XBUTTONDOWN || wParam = WM_XBUTTONUP){
+				; X Buttons - mouseData indicates Xbutton 1 or Xbutton2
+				if (wParam = WM_XBUTTONDOWN){
 					event := 1
 				} else {
-					event := -1
+					event := 0
 				}
-			} else if (wParam = WM_XBUTTONDOWN || wParam = WM_XBUTTONUP ){
-				if (wParam = WM_XBUTTONUP){
-					debug := "me"
-				}
-				vk := 3 + mouseData
-				event := (wParam = WM_XBUTTONDOWN)
-			} else {
-				; Only down left
-				event := 1
+				button := 3 + mouseData
 			}
-			;tooltip % "type: " HotClass.INPUT_TYPES[HotClass.INPUT_TYPE_M] "`ncode: " vk "`nevent: " event
-			if (this._ProcessInput({type: HotClass.INPUT_TYPE_M, input: { vk: vk}, event: event})){
-				; Return 1 to block this input
-				; ToDo: call _ProcessInput via another thread? We only have 300ms to return 1 else it wont get blocked?
-				return 1
-			}
-		} else if (wParam != 0x200){
-			debug := "here"
 		}
-		Return this._CallNextHookEx(nCode, wParam, lParam)
+
+		block := this._Callback.({Type: "m", Code: button, event: event})
+		if (wParam = WM_MOUSEHWHEEL || wParam = WM_MOUSEWHEEL){
+			; Mouse wheel does not generate up event, simulate it.
+			this._Callback.({Type: "m", Code: button, event: 0})
+		}
+		if (block){
+			return 1
+		}
+		Return DllCall("CallNextHookEx", "Uint", Object(A_EventInfo)._hHookMouse, "int", this, "Uint", wParam, "Uint", lParam)
 	}
 	
+	; ============= HOOK HANDLING =================
 	_SetWindowsHookEx(idHook, pfn){
-		Return DllCall("SetWindowsHookEx", "int", idHook, "Uint", pfn, "Uint", DllCall("GetModuleHandle", "Uint", 0, "Ptr"), "Uint", 0, "Ptr")
+		Return DllCall("SetWindowsHookEx", "Ptr", idHook, "Ptr", pfn, "Uint", DllCall("GetModuleHandle", "Uint", 0, "Ptr"), "Uint", 0, "Ptr")
+	}
+	
+	_UnhookWindowsHookEx(idHook){
+		Return DllCall("UnhookWindowsHookEx", "Ptr", idHook)
 	}
 
-	_UnhookWindowsHookEx(hHook){
-		Return DllCall("UnhookWindowsHookEx", "Uint", hHook)
-	}
-
-	_CallNextHookEx(nCode, wParam, lParam, hHook := 0){
-		Return DllCall("CallNextHookEx", "Uint", hHook, "int", nCode, "Uint", wParam, "Uint", lParam)
-	}
-
-	; https://msdn.microsoft.com/en-us/library/windows/desktop/ms646307(v=vs.85).aspx
-	; scan code is translated into a virtual-key code that does not distinguish between left- and right-hand keys
-	_MapVirtualKeyEx(nCode, uMapType := 1){ ; MAPVK_VSC_TO_VK
-		; Get locale
-		static dwhkl := DllCall("GetKeyboardLayout", "uint", 0)
-		
-		ret := 0
-		; MAPVK_VSC_TO_VK - The uCode parameter is a scan code and is translated into a virtual-key code
-		; Check cache
-		if (!this[this._MapTypes[uMapType]][nCode]){
-			; Populate cache
-			ret := DllCall("MapVirtualKeyEx", "Uint", nCode, "Uint", uMapType, "Ptr", dwhkl, "Uint")
-			if (ret = ""){
-				ret := 0
-			}
-			this[this._MapTypes[uMapType]][nCode] := ret
-		} else {
-			; cache hit
-			ret := this[this._MapTypes[uMapType]][nCode]
-		}
-		; Return result
-		return ret
-	}
-}
-
-; bind by Lexikos
-; Requires test build of AHK? Will soon become part of AHK
-; See http://ahkscript.org/boards/viewtopic.php?f=24&t=5802
-bind(fn, args*) {  ; bind v1.2
-    try bound := fn.bind(args*)  ; Func.Bind() not yet implemented.
-    return bound ? bound : new BoundFunc(fn, args*)
-}
-
-class BoundFunc {
-    __New(fn, args*) {
-        this.fn := IsObject(fn) ? fn : Func(fn)
-        this.args := args
-    }
-    __Call(callee, args*) {
-        if (callee = "" || callee = "call" || IsObject(callee)) {  ; IsObject allows use as a method.
-            fn := this.fn, args.Insert(1, this.args*)
-            return %fn%(args*)
-        }
-    }
-}
-
-; _BindCallback by GeekDude
-_BindCallback(Params*)
-{
-    if IsObject(Params)
-    {
-        this := {}
-        this.Function := Params[1]
-        this.Options := Params[2]
-        this.ParamCount := Params[3]
-        Params.Remove(1, 3)
-        this.Params := Params
-        if (this.ParamCount == "")
-            this.ParamCount := IsFunc(this.Function)-1 - Floor(Params.MaxIndex())
-        return RegisterCallback(A_ThisFunc, this.Options, this.ParamCount, Object(this))
-    }
-    else
-    {
-        this := Object(A_EventInfo)
-        MyParams := [this.Params*]
-        Loop, % this.ParamCount
-            MyParams.Insert(NumGet(Params+0, (A_Index-1)*A_PtrSize))
-        return this.Function.(MyParams*)
-    }
 }
