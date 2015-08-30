@@ -1,18 +1,16 @@
 # HotClass
 A class that enhances AutoHotkey's input detection (ie hotkeys) capabilities
 
-####Limitations of vanilla AHK that this class seeks to overcome:
-* Maximum of 100 hotkeys  
-This is not normally a problem, but in certain cases can be.
-* Cannot fully remove hotkeys  
-Only really an issue with the 1000 limit.
-* Only down events supported for joystick buttons  
-No up events for buttons, `GetKeyState()` must normally be used.
-* No event-based mechanism for Joystick axis change.  
-Again, endless `GetKeyState` loops must be used.
-* No way of easily providing a "Bind" box that facilitates visually choosing of a hotkey, *that supports all input methods*.  
-The `Hotkey` Gui item only supports certain keyboard keys.  
-The `Input` command has limited support (No Joystick) and requires hacky `#if` statements to fully support some keys and combos.  
+Supports any combination of the following types of "key".  
+Keyboard keys.  
+Mouse Buttons: 1-5.  
+Mouse Wheel: U,D,L,R.  
+Joystick Buttons: 1-32  
+Joystick POV Hat / Dpad Directions: U,D,L,R.  
 
-####How it works
-Keyboard / mouse input is read via `SetWindowsHookEx` callbacks.  Blocking of Keyboard / mouse input can be achieved through this call.
+Any number of keys, pressed in any order.  
+
+##How it works
+Keyboard / mouse input is read via `SetWindowsHookEx` callbacks.  Blocking of Keyboard / mouse input can be achieved through this call.  
+Joystick Button down events are handled by AHK's hotkey command, up events are simulated with a `GetKeyState` loop.  
+Joystick POV Hat detection is done via a `GetKeyState` loop.  
