@@ -126,26 +126,42 @@ class HotClass{
 		set_intersections := {}
 		
 		; find longest hotkey length
-		for name, hk in this._Hotkeys {
-			count++
-			if (hk.Value.length() > currentlength){
-				currentlength := hk.Value.length()
+		for name, hotkey in this._Hotkeys {
+			count++							; count holds number of hotkeys
+			hotkey._IsSubSetOf := []		; Array that holds other hotkeys that this hotkey is a subset of
+			hotkey._IsSuperSetOf := []		; Array that holds other hotkeys that this hotkey is a superset of
+			if (hotkey.Value.length() > currentlength){
+				currentlength := hotkey.Value.length()
 			}
 		}
+		
+		; currentlength should now hold length of longest hotkey
 		this._HotkeyCache := []
-		; Sort backwards
 		hotkeys := this._Hotkeys.clone()
+		;Keep looping until all hotkeys have been matched
 		while (Count){
-			;for name, hotkey in this._Hotkeys {
+			; Iterate through clone of hotkey list, decrementing currentlength each time
 			for name, hotkey in hotkeys {
+				; check if length matches currentlength
 				if (hotkey.Value.length() = currentlength){
+					; Find out if any of the previously added hotkeys are a superset of this one.
+					Loop % this._HotkeyCache.length(){
+						; Check this hotkey against the one in the cache
+						if (this._CompareHotkeys(hotkey.Value,this._HotkeyCache[A_Index].Value)){
+							hotkey._IsSubSetOf.push(this._HotkeyCache[A_Index])
+							this._HotkeyCache[A_Index]._IsSuperSetOf.push(hotkey)
+						}
+					}
+					; Add hotkey to the cache
 					this._HotkeyCache.push(hotkey)
+					; remove this hotkey from the loop
 					hotkeys.Remove(name)
 					Count--
 				}
 			}
 			currentlength--
 		}
+		dbg := "me"
 	}
 	
 	; All Input Events flow through here - ie an input device changes state
@@ -258,13 +274,11 @@ class HotClass{
 					if (Count = length){
 						break
 					}
-				} else {
-					;OutputDebug % out "NO"
 				}
 			}
 		}
 		
-		if (Count = length){
+		if (Count && (Count = length)){
 			return hi
 		}
 		return 0
@@ -294,7 +308,7 @@ class HotClass{
 			this._Callback := callback
 			this.Name := name
 			this.BindList := {}
-			this.Value := {}		; Holds the current binding
+			this.Value := {}						; Holds the current binding
 			
 			Gui, % "Add", ComboBox, % "hwndhwnd AltSubmit " aParams[1], % this._MenuText
 			this._hwnd := hwnd
