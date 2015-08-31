@@ -17,13 +17,12 @@ class MyClass {
 		Gui, New, hwndhwnd
 		this.hwnd := hwnd
 		this.HotClass := new HotClass(hwnd)
-		this.HotClass.AddHotkey("hk1", this.hkPressed.Bind(this, "hk1"), "w280 xm")
-		Gui, % this.hwnd ":Add", Checkbox, Disabled hwndhwnd1 xp+290 yp+4
-		this.HotClass.AddHotkey("hk2", this.hkPressed.Bind(this, "hk2"), "w280 xm")
-		Gui, % this.hwnd ":Add", Checkbox, Disabled hwndhwnd2 xp+290 yp+4
-		this.HotClass.AddHotkey("hk3", this.hkPressed.Bind(this, "hk3"), "w280 xm")
-		Gui, % this.hwnd ":Add", Checkbox, Disabled hwndhwnd3 xp+290 yp+4
-		this.hStateChecks := {hk1: hwnd1, hk2: hwnd2, hk3: hwnd3}
+		Loop % 10 {
+			name := "hk" A_Index
+			this.HotClass.AddHotkey(name, this.hkPressed.Bind(this, name), "w280 xm")
+			Gui, % this.hwnd ":Add", Checkbox, Disabled hwndhwnd xp+290 yp+4
+			this.hStateChecks[name] := hwnd
+		}
 		Gui, % this.hwnd ":Show", x0 y0
 	}
 	
