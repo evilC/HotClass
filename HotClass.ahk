@@ -95,28 +95,7 @@ class HotClass{
 				; Transition from BIND state
 				; Build size-ordered list of hotkeys
 				out := ", ADDED " this._HeldKeys.length() " key combo hotkey"
-				currentlength := 0
-				count := 0
-				
-				; find longest hotkey length
-				for name, hk in this._Hotkeys {
-					count++
-					if (hk.Value.length() > currentlength){
-						currentlength := hk.Value.length()
-					}
-				}
-				this._HotkeyCache := []
-				; Sort backwards
-				while (Count){
-					for name, hotkey in this._Hotkeys {
-						if (hotkey.Value.length() = currentlength){
-							this._HotkeyCache.push(hotkey)
-							Count--
-						}
-					}
-					currentlength--
-				}
-				;OutputDebug % "Hotkey Type: " this._HotkeyCache[1].Value[1].Type
+				this._BuildHotkeyCache()
 			}
 			this.CInputDetector.EnableHooks()
 			this._HeldKeys := []
@@ -140,6 +119,35 @@ class HotClass{
 		return 0
 	}
 
+	; Builds the quick lookup cache for _ProcessInput's ACTIVE state
+	_BuildHotkeyCache(){
+		currentlength := 0
+		count := 0
+		set_intersections := {}
+		
+		; find longest hotkey length
+		for name, hk in this._Hotkeys {
+			count++
+			if (hk.Value.length() > currentlength){
+				currentlength := hk.Value.length()
+			}
+		}
+		this._HotkeyCache := []
+		; Sort backwards
+		hotkeys := this._Hotkeys.clone()
+		while (Count){
+			;for name, hotkey in this._Hotkeys {
+			for name, hotkey in hotkeys {
+				if (hotkey.Value.length() = currentlength){
+					this._HotkeyCache.push(hotkey)
+					hotkeys.Remove(name)
+					Count--
+				}
+			}
+			currentlength--
+		}
+	}
+	
 	; All Input Events flow through here - ie an input device changes state
 	; Encompasses keyboard keys, mouse buttons / wheel and joystick buttons or hat directions
 	_ProcessInput(keyevent){
