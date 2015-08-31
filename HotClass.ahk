@@ -280,23 +280,24 @@ class HotClass{
 					this._ActiveHotkeys.Remove(main_name)
 				}
 			}
-		}
-		
-		; Fire all up event callbacks, then all down event callbacks.
-		Loop 2 {
-			idx := A_Index - 1
-			For delta_name, state in hotkey_delta {
-				; Release all hotkeys that want to go up
-				if (state = idx){
-					if (this._HotkeyStates[delta_name] != state){
-						OutputDebug % "CALLBACK " delta_name ": " state
-						this._Hotkeys[delta_name]._Callback.(state)
-						this._HotkeyStates[delta_name] := state
+			
+			; Fire all up event callbacks, then all down event callbacks.
+			Loop 2 {
+				idx := A_Index - 1
+				For delta_name, state in hotkey_delta {
+					; Release all hotkeys that want to go up
+					if (state = idx){
+						if (this._HotkeyStates[delta_name] != state){
+							OutputDebug % "CALLBACK " delta_name ": " state
+							this._Hotkeys[delta_name]._Callback.(state)
+							this._HotkeyStates[delta_name] := state
+						}
 					}
 				}
 			}
+			; Default to not blocking input
 		}
-		; Default to not blocking input
+		
 		return 0 ; don't block input
 	}
 	
