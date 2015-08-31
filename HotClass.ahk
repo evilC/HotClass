@@ -46,8 +46,9 @@ class HotClass{
 	__New(options := 0){
 		this.STATES := {IDLE: 0, ACTIVE: 1, BIND: 2}		; State Name constants, for human readibility
 		this._HotkeyCache := []								; Length ordered array of keysets
+		this._HotkeyStates := {}							; Name indexed list of boolean state values
 		this._KeyCache := []								; Associative array of key uids
-		this._ActiveHotkeys := []
+		this._ActiveHotkeys := []							; Hotkeys currently in down state - for quick ObjHasKey matching
 		this._FuncEscTimer := this._EscTimer.Bind(this)
 
 		; Set default options
@@ -86,7 +87,7 @@ class HotClass{
 			this._BindName := ""					; The name of the hotkey that is being bound
 			this._Hotkeys := {}						; a name indexed array of hotkey objects
 			this._HeldKeys := []					; The keys that are currently held
-			this._ActiveHotkeys := []				; Hotkeys which are currently in a down state
+			this._ActiveHotkeys := {}				; Hotkeys which are currently in a down state
 			;OutputDebug % "ENTERED IDLE STATE"
 			return 1
 		} else if (state == this.STATES.ACTIVE ){
@@ -128,6 +129,7 @@ class HotClass{
 	_BuildHotkeyCache(){
 		OutputDebug % "Building hotkey cache"
 		this._KeyCache := {}
+		this._HotkeyStates := {}
 		currentlength := 0
 		count := 0
 		set_intersections := {}
@@ -136,6 +138,7 @@ class HotClass{
 			count++							; count holds number of hotkeys
 			hotkey._IsSubSetOf := []		; Array that holds other hotkeys that this hotkey is a subset of
 			hotkey._IsSuperSetOf := []		; Array that holds other hotkeys that this hotkey is a superset of
+			this._HotkeyStates[name] := 0	; Initialize state
 			if (hotkey.Value.length() > currentlength){
 				currentlength := hotkey.Value.length()
 			}
@@ -238,8 +241,7 @@ class HotClass{
 				return 0
 			}
 			
-			hotkey_press := {}
-			hotkey_release := {}
+			hotkey_delta := {}
 			; Loop through hotkeys, longest to shortest.
 			Loop % this._HotkeyCache.length(){
 				main_name := this._HotkeyCache[A_Index].name
@@ -258,50 +260,42 @@ class HotClass{
 					}
 					if (!brk){
 						;OutputDebug % "MATCH: " main_name
-						hotkey_press[main_name] := 1
+						hotkey_delta[main_name] := 1
 						this._ActiveHotkeys[main_name] := this._Hotkeys[main_name].Value
 						
 					} else {
 						; does not match.
 						;OutputDebug % "IGNORE: " main_name
-						hotkey_release[main_name] := 1
+						hotkey_delta[main_name] := 0
 						this._ActiveHotkeys.Remove(main_name)
 					}
 					
 				} else {
 					;OutputDebug % "DOES NOT MATCH: " main_name
-					hotkey_release[main_name] := 1
+					hotkey_delta[main_name] := 0
 					this._ActiveHotkeys.Remove(main_name)
 				}
 			}
 		}
-		; Release all hotkeys that want to go up
-		For release_name, obj in hotkey_release {
-			this._HotkeyChangedState(release_name, 0)
+		
+		; Fire all up event callbacks, then all down event callbacks.
+		Loop 2 {
+			idx := A_Index - 1
+			For delta_name, state in hotkey_delta {
+				; Release all hotkeys that want to go up
+				if (state = idx){
+					if (this._HotkeyStates[delta_name] != state){
+						OutputDebug % "CALLBACK " delta_name ": " state
+						this._Hotkeys[delta_name]._Callback.(state)
+						this._HotkeyStates[delta_name] := state
+					}
+				}
+			}
 		}
-		; press al hotkeys that want to go down
-		For press_name, obj in hotkey_press {
-			this._HotkeyChangedState(press_name, 1)
-		}
-		;OutputDebug % "HELD: " this._RenderHotkeys(this._HeldKeys) " - ACTIVE: " this._RenderNamedHotkeys(this._ActiveHotkeys)
-		hotkey_states := this._ActiveHotkeys.clone()
 		; Default to not blocking input
 		return 0 ; don't block input
 	}
 	
-	_HotkeyChangedState(name, event){
-		if (event){
-			OutputDebug % "TRIGGER DOWN: " name
-			;SoundBeep, 1000, 150
-			this._ActiveHotkeys[name] := this._Hotkeys[name].Value
-			this._Hotkeys[name]._Callback.(1)
-		} else {
-			OutputDebug % "TRIGGER UP: " name
-			;SoundBeep, 500, 150
-			this._ActiveHotkeys.Remove(name)
-			this._Hotkeys[name]._Callback.(0)
-		}
-	}
 	
 	; All of needle must be in haystack
 	_CompareHotkeys(needle, haystack){
