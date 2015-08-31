@@ -167,7 +167,6 @@ class HotClass{
 	; All Input Events flow through here - ie an input device changes state
 	; Encompasses keyboard keys, mouse buttons / wheel and joystick buttons or hat directions
 	_ProcessInput(keyevent){
-		outputdebug pi
 		static state := {0: "U", 1: "D"}
 		; Update list of held keys, filter repeat events
 		if (keyevent.event){
@@ -226,11 +225,15 @@ class HotClass{
 					name := this._HotkeyCache[hk].name
 					; Supress Repeats - eg if A is bound, and A is held, do not fire A again if B is pressed.
 					if ((!ObjHasKey(this._ActiveHotkeys, name)) && this._CompareHotkeys(this._HotkeyCache[hk].Value, this._HeldKeys)){
-						OutputDebug % "TRIGGER DOWN: " name
-						;SoundBeep, 1000, 150
-						tt .= "`n" name " DOWN"
-						this._ActiveHotkeys[name] := this._HotkeyCache[hk].Value
-						this._HotkeyCache[hk]._Callback.(1)
+						; Before sending down event for this hotkey, check whether any subset hotkeys should be released
+						Loop % this._HotkeyCache[hk]._IsSuperSetOf.length(){
+							; Check if a subset hotkey was active
+							if (ObjHasKey(this._ActiveHotkeys, this._HotkeyCache[hk]._IsSuperSetOf[A_Index].name)){
+								; it got overridden, release it
+								this._HotkeyChangedState(this._HotkeyCache[hk]._IsSuperSetOf[A_Index].name, 0)
+							}
+						}
+						this._HotkeyChangedState(name, 1)
 						break
 					}
 				}
@@ -239,11 +242,8 @@ class HotClass{
 				newhotkeys := this._ActiveHotkeys.clone()
 				for name, hotkey in this._ActiveHotkeys {
 					if (!this._CompareHotkeys(this._ActiveHotkeys[name], this._HeldKeys)){
-						OutputDebug % "TRIGGER UP: " name
 						newhotkeys.Remove(name)
-						;SoundBeep, 500, 150
-						tt .= "`n" name " UP"
-						this._Hotkeys[name]._Callback.(0)
+						this._HotkeyChangedState(name, 0)
 					}
 				}
 				this._ActiveHotkeys := newhotkeys
@@ -254,6 +254,19 @@ class HotClass{
 		;ToolTip % tt
 		; Default to not blocking input
 		return 0 ; don't block input
+	}
+	
+	_HotkeyChangedState(name, event){
+		if (event){
+			OutputDebug % "TRIGGER DOWN: " name
+			;SoundBeep, 1000, 150
+			this._ActiveHotkeys[name] := this._Hotkeys[name].Value
+			this._Hotkeys[name]._Callback.(1)
+		} else {
+			OutputDebug % "TRIGGER UP: " name
+			;SoundBeep, 500, 150
+			this._Hotkeys[name]._Callback.(0)
+		}
 	}
 	
 	; All of needle must be in haystack
