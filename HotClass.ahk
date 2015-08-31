@@ -187,8 +187,6 @@ class HotClass{
 	; All Input Events flow through here - ie an input device changes state
 	; Encompasses keyboard keys, mouse buttons / wheel and joystick buttons or hat directions
 	_ProcessInput(keyevent){
-		static state := {0: "U", 1: "D"}
-		
 		; Update list of held keys, filter repeat events
 		if (keyevent.event){
 			; Down event - add keys.
@@ -239,6 +237,9 @@ class HotClass{
 			if (!ObjHasKey(this._KeyCache, keyevent.uid)){
 				return 0
 			}
+			
+			hotkey_press := {}
+			hotkey_release := {}
 			; Loop through hotkeys, longest to shortest.
 			Loop % this._HotkeyCache.length(){
 				main_name := this._HotkeyCache[A_Index].name
@@ -256,26 +257,34 @@ class HotClass{
 						}
 					}
 					if (!brk){
-						if (!ObjHasKey(this._ActiveHotkeys, main_name)){
-							OutputDebug % "MATCH " main_name
-							this._HotkeyChangedState(main_name, 1)
-						}
+						;OutputDebug % "MATCH: " main_name
+						hotkey_press[main_name] := 1
+						this._ActiveHotkeys[main_name] := this._Hotkeys[main_name].Value
+						
 					} else {
 						; does not match.
-						if (ObjHasKey(this._ActiveHotkeys, main_name)){
-							OutputDebug % "IGNORE " main_name
-							this._HotkeyChangedState(main_name, 0)
-						}
+						;OutputDebug % "IGNORE: " main_name
+						hotkey_release[main_name] := 1
+						this._ActiveHotkeys.Remove(main_name)
 					}
 					
 				} else {
-					if (ObjHasKey(this._ActiveHotkeys, main_name)){
-						this._HotkeyChangedState(main_name, 0)
-					}
+					;OutputDebug % "DOES NOT MATCH: " main_name
+					hotkey_release[main_name] := 1
+					this._ActiveHotkeys.Remove(main_name)
 				}
 			}
 		}
-		OutputDebug % "HELD: " this._RenderHotkeys(this._HeldKeys) " - ACTIVE: " this._RenderNamedHotkeys(this._ActiveHotkeys)
+		; Release all hotkeys that want to go up
+		For release_name, obj in hotkey_release {
+			this._HotkeyChangedState(release_name, 0)
+		}
+		; press al hotkeys that want to go down
+		For press_name, obj in hotkey_press {
+			this._HotkeyChangedState(press_name, 1)
+		}
+		;OutputDebug % "HELD: " this._RenderHotkeys(this._HeldKeys) " - ACTIVE: " this._RenderNamedHotkeys(this._ActiveHotkeys)
+		hotkey_states := this._ActiveHotkeys.clone()
 		; Default to not blocking input
 		return 0 ; don't block input
 	}
