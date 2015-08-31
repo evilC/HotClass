@@ -19,6 +19,9 @@ class MyClass {
 		Gui, Add, Checkbox, Disabled hwndhwnd1 xp+290 yp+4
 		this.HotClass.AddHotkey("hk2", this.hkPressed.Bind(this, "hk2"), "w280 xm")
 		Gui, Add, Checkbox, Disabled hwndhwnd2 xp+290 yp+4
+		this.HotClass.AddHotkey("hk3", this.hkPressed.Bind(this, "hk3"), "w280 xm")
+		Gui, Add, Checkbox, Disabled hwndhwnd3 xp+290 yp+4
+		;this.hStateChecks := {hk1: hwnd1, hk2: hwnd2, hk3: hwnd3}
 		this.hStateChecks := {hk1: hwnd1, hk2: hwnd2}
 		Gui, Show, x0 y0
 	}
@@ -124,11 +127,11 @@ class HotClass{
 	* Build list of all keys that are present in any keyset, so we can quickly filter out keys that are not relevant in _ProcessInput
 	*/
 	_BuildHotkeyCache(){
+		OutputDebug % "Building hotkey cache"
 		this._KeyCache := {}
 		currentlength := 0
 		count := 0
 		set_intersections := {}
-		
 		; find longest hotkey length, build key cache
 		for name, hotkey in this._Hotkeys {
 			count++							; count holds number of hotkeys
@@ -146,8 +149,12 @@ class HotClass{
 		this._HotkeyCache := []
 		hotkeys := this._Hotkeys.clone()
 		;Keep looping until all hotkeys have been matched
-		while (Count){
+		
+		t := A_TickCount
+		while (Count && A_TickCount - t < 2000){
+		;while (Count){
 			; Iterate through clone of hotkey list, decrementing currentlength each time
+			new_hotkeys := hotkeys.clone()
 			for name, hotkey in hotkeys {
 				; check if length matches currentlength
 				if (hotkey.Value.length() = currentlength){
@@ -162,13 +169,20 @@ class HotClass{
 					; Add hotkey to the cache
 					this._HotkeyCache.push(hotkey)
 					; remove this hotkey from the loop
-					hotkeys.Remove(name)
+					;hotkeys.Remove(name)
+					new_hotkeys.Remove(name)
 					Count--
 				}
 			}
+			hotkeys := new_hotkeys
 			currentlength--
 		}
+		if (Count){
+			OutputDebug % "Aborted Building hotkey cache"
+			return
+		}
 		dbg := "me"
+		OutputDebug % "hotkey cache built"
 	}
 	
 	; All Input Events flow through here - ie an input device changes state
@@ -246,7 +260,7 @@ class HotClass{
 						}
 						OutputDebug % "pressing " name
 						this._HotkeyChangedState(name, 1)
-						break
+						break ; ToDo: One way or another, this break has to go - more than one hotkey could fire as a result of one key going down.
 					}
 				}
 			} else {
