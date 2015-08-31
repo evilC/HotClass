@@ -132,18 +132,13 @@ class HotClass{
 	}
 
 	; Builds the quick lookup cache for _ProcessInput's ACTIVE state
-	/*
-	ToDo:
-	* Build list of all keys that are present in any keyset, so we can quickly filter out keys that are not relevant in _ProcessInput
-	*/
 	_BuildHotkeyCache(){
 		OutputDebug % "Building hotkey cache"
 		this._KeyCache := {}
 		this._HotkeyStates := {}
 		currentlength := 0
 		count := 0
-		set_intersections := {}
-		; find longest hotkey length, build key cache
+		; find longest hotkey length, build key cache, initialize subset / superset arrays
 		for name, hotkey in this._Hotkeys {
 			count++							; count holds number of hotkeys
 			hotkey._IsSubSetOf := []		; Array that holds other hotkeys that this hotkey is a subset of
@@ -160,10 +155,9 @@ class HotClass{
 		; currentlength should now hold length of longest hotkey
 		this._HotkeyCache := []
 		hotkeys := this._Hotkeys.clone()
-		;Keep looping until all hotkeys have been matched
-		
+		; Build length (as in number of keys in each hotkey) ordered list of hotkeys
 		t := A_TickCount
-		while (Count && A_TickCount - t < 2000){
+		while (Count && A_TickCount - t < 2000){	; insurance against dumb code inside)
 		;while (Count){
 			; Iterate through clone of hotkey list, decrementing currentlength each time
 			new_hotkeys := hotkeys.clone()
@@ -186,6 +180,7 @@ class HotClass{
 					Count--
 				}
 			}
+			; Replace hotkeys with shorter version for next run.
 			hotkeys := new_hotkeys
 			currentlength--
 		}
