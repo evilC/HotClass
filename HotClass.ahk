@@ -21,8 +21,7 @@ class MyClass {
 		Gui, Add, Checkbox, Disabled hwndhwnd2 xp+290 yp+4
 		this.HotClass.AddHotkey("hk3", this.hkPressed.Bind(this, "hk3"), "w280 xm")
 		Gui, Add, Checkbox, Disabled hwndhwnd3 xp+290 yp+4
-		;this.hStateChecks := {hk1: hwnd1, hk2: hwnd2, hk3: hwnd3}
-		this.hStateChecks := {hk1: hwnd1, hk2: hwnd2}
+		this.hStateChecks := {hk1: hwnd1, hk2: hwnd2, hk3: hwnd3}
 		Gui, Show, x0 y0
 	}
 	
@@ -189,6 +188,7 @@ class HotClass{
 	; Encompasses keyboard keys, mouse buttons / wheel and joystick buttons or hat directions
 	_ProcessInput(keyevent){
 		static state := {0: "U", 1: "D"}
+		
 		; Update list of held keys, filter repeat events
 		if (keyevent.event){
 			; Down event - add keys.
@@ -239,43 +239,38 @@ class HotClass{
 			if (!ObjHasKey(this._KeyCache, keyevent.uid)){
 				return 0
 			}
-			if (keyevent.event = 1){
-				; Down event in ACTIVE state
-				; Check list of bound hotkeys for matches.
-				; List must be indexed LONGEST (most keys in combination) to SHORTEST (least keys in combination) to ensure correct behavior
-				; ie if CTRL+A and A are both bound, pressing CTRL+A should match CTRL+A before A.
-				Loop % this._HotkeyCache.length(){
-					hk := A_Index
-					name := this._HotkeyCache[hk].name
-					; Supress Repeats - eg if A is bound, and A is held, do not fire A again if B is pressed.
-					if ((!ObjHasKey(this._ActiveHotkeys, name)) && this._CompareHotkeys(this._HotkeyCache[hk].Value, this._HeldKeys)){
-						; Before sending down event for this hotkey, check whether any subset hotkeys should be released
-						Loop % this._HotkeyCache[hk]._IsSuperSetOf.length(){
-							; Check if a subset hotkey was active
-							if (ObjHasKey(this._ActiveHotkeys, this._HotkeyCache[hk]._IsSuperSetOf[A_Index].name)){
-								; it got overridden, release it
-								OutputDebug % "releasing " this._HotkeyCache[hk]._IsSuperSetOf[A_Index].name " because " name " overrode it"
-								this._HotkeyChangedState(this._HotkeyCache[hk]._IsSuperSetOf[A_Index].name, 0)
-							}
+			; Loop through hotkeys, longest to shortest.
+			Loop % this._HotkeyCache.length(){
+				main_name := this._HotkeyCache[A_Index].name
+				if (this._CompareHotkeys(this._Hotkeys[main_name].Value, this._HeldKeys)){
+					; hotkey matches
+					; check if hotkey is overridden
+					brk := 0
+					Loop % this._Hotkeys[main_name]._IsSubSetOf.length(){
+						superset_name := this._Hotkeys[main_name]._IsSubSetOf[A_Index].name
+						; is this key a subset of an active superset?
+						if (ObjHasKey(this._ActiveHotkeys, superset_name)){
+							; ignore
+							brk := 1
+							break
 						}
-						OutputDebug % "pressing " name
-						this._HotkeyChangedState(name, 1)
-						break ; ToDo: One way or another, this break has to go - more than one hotkey could fire as a result of one key going down.
 					}
-				}
-			} else {
-				; Up event in ACTIVE state - check active hotkeys for release
-				for name, hotkey in this._ActiveHotkeys {
-					if (!this._CompareHotkeys(this._ActiveHotkeys[name], this._HeldKeys)){
-						; Check subset keysets to see if they are now valid
-						OutputDebug % "releasing " name
-						this._HotkeyChangedState(name, 0)
-						Loop % this._Hotkeys[name]._IsSuperSetOf.length(){
-							if (this._CompareHotkeys(this._Hotkeys[name]._IsSuperSetOf[A_Index].Value, this._HeldKeys)){
-								OutputDebug % "pressing " this._Hotkeys[name]._IsSuperSetOf[A_Index].Name " because " name " is no longer overriding it"
-								this._HotkeyChangedState(this._Hotkeys[name]._IsSuperSetOf[A_Index].Name, 1)
-							}
+					if (!brk){
+						if (!ObjHasKey(this._ActiveHotkeys, main_name)){
+							OutputDebug % "MATCH " main_name
+							this._HotkeyChangedState(main_name, 1)
 						}
+					} else {
+						; does not match.
+						if (ObjHasKey(this._ActiveHotkeys, main_name)){
+							OutputDebug % "IGNORE " main_name
+							this._HotkeyChangedState(main_name, 0)
+						}
+					}
+					
+				} else {
+					if (ObjHasKey(this._ActiveHotkeys, main_name)){
+						this._HotkeyChangedState(main_name, 0)
 					}
 				}
 			}
