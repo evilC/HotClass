@@ -45,7 +45,8 @@ class HotClass{
 	; startactive param decides 
 	__New(options := 0){
 		this.STATES := {IDLE: 0, ACTIVE: 1, BIND: 2}		; State Name constants, for human readibility
-		this._HotkeyCache := []
+		this._HotkeyCache := []								; Length ordered array of keysets
+		this._KeyCache := []								; Associative array of key uids
 		this._ActiveHotkeys := []
 		this._FuncEscTimer := this._EscTimer.Bind(this)
 
@@ -125,17 +126,21 @@ class HotClass{
 	* Build list of all keys that are present in any keyset, so we can quickly filter out keys that are not relevant in _ProcessInput
 	*/
 	_BuildHotkeyCache(){
+		this._KeyCache := {}
 		currentlength := 0
 		count := 0
 		set_intersections := {}
 		
-		; find longest hotkey length
+		; find longest hotkey length, build key cache
 		for name, hotkey in this._Hotkeys {
 			count++							; count holds number of hotkeys
 			hotkey._IsSubSetOf := []		; Array that holds other hotkeys that this hotkey is a subset of
 			hotkey._IsSuperSetOf := []		; Array that holds other hotkeys that this hotkey is a superset of
 			if (hotkey.Value.length() > currentlength){
 				currentlength := hotkey.Value.length()
+			}
+			Loop % hotkey.Value.length() {
+				this._KeyCache[hotkey.Value[A_Index].uid] := 1
 			}
 		}
 		
@@ -218,7 +223,10 @@ class HotClass{
 			return 1 ; block input
 		} else if (this._State == this.STATES.ACTIVE){
 			; ACTIVE state - aka "Normal Operation". Trigger hotkey callbacks as appropriate
-			tt := ""
+			; Ignore events for keys not involved in hotkeys
+			if (!ObjHasKey(this._KeyCache, keyevent.uid)){
+				return 0
+			}
 			if (keyevent.event = 1){
 				; Down event in ACTIVE state
 				; Check list of bound hotkeys for matches.
@@ -259,10 +267,8 @@ class HotClass{
 					}
 				}
 			}
-			;out .=  " Now " this._HeldKeys.length() " keys"
 		}
 		OutputDebug % "HELD: " this._RenderHotkeys(this._HeldKeys) " - ACTIVE: " this._RenderNamedHotkeys(this._ActiveHotkeys)
-		;ToolTip % tt
 		; Default to not blocking input
 		return 0 ; don't block input
 	}
