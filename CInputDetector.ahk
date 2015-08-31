@@ -73,7 +73,7 @@ class CInputDetector {
 	; Process Joystick button down events
 	_ProcessJHook(joyid, btn){
 		;ToolTip % "Joy " joyid " Btn " btn
-		this._Callback.({Type: "j", Code: btn, joyid: joyid, event: 1})
+		this._Callback.({Type: "j", Code: btn, joyid: joyid, event: 1, uid: joyid "j" btn})
 		fn := this._WaitForJoyUp.Bind(this, joyid, btn)
 		SetTimer, % fn, -0
 	}
@@ -84,7 +84,7 @@ class CInputDetector {
 		while (GetKeyState(str)){
 			sleep 10
 		}
-		this._Callback.({Type: "j", Code: btn, joyid: joyid, event: 0})
+		this._Callback.({Type: "j", Code: btn, joyid: joyid, event: 0, uid: joyid "j" btn})
 	}
 	
 	; A constantly running timer to emulate "button events" for Joystick POV directions (eg 2JoyPOVU, 2JoyPOVD...)
@@ -108,7 +108,7 @@ class CInputDetector {
 			
 			Loop 4 {
 				if (pov_direction_states[joyid, A_Index] != pov_direction_map[state, A_Index]){
-					this._Callback.({Type: "h", Code: A_Index, joyid: joyid, event: pov_direction_map[state, A_Index]})
+					this._Callback.({Type: "h", Code: A_Index, joyid: joyid, event: pov_direction_map[state, A_Index], uid: joyid "h" A_Index})
 				}
 			}
 			pov_states[joyid] := pov
@@ -136,7 +136,7 @@ class CInputDetector {
 		event := wParam = WM_SYSKEYDOWN || wParam = WM_KEYDOWN
 		
         if ( sc != 541 ){		; ignore non L/R Control. This key never happens except eg with RALT
-			block := this._Callback.({ Type: "k", Code: sc, event: event})
+			block := this._Callback.({ Type: "k", Code: sc, event: event, uid: "k" sc})
 			if (block){
 				return 1
 			}
@@ -200,10 +200,10 @@ class CInputDetector {
 			}
 		}
 
-		block := this._Callback.({Type: "m", Code: button, event: event})
+		block := this._Callback.({Type: "m", Code: button, event: event, uid: "m" button})
 		if (wParam = WM_MOUSEHWHEEL || wParam = WM_MOUSEWHEEL){
 			; Mouse wheel does not generate up event, simulate it.
-			this._Callback.({Type: "m", Code: button, event: 0})
+			this._Callback.({Type: "m", Code: button, event: 0, uid: "m" button})
 		}
 		if (block){
 			return 1

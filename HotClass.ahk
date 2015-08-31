@@ -167,6 +167,7 @@ class HotClass{
 	; All Input Events flow through here - ie an input device changes state
 	; Encompasses keyboard keys, mouse buttons / wheel and joystick buttons or hat directions
 	_ProcessInput(keyevent){
+		outputdebug pi
 		static state := {0: "U", 1: "D"}
 		; Update list of held keys, filter repeat events
 		if (keyevent.event){
@@ -265,10 +266,7 @@ class HotClass{
 			; Loop through the haystack to see if this item is present
 			Loop % haystack.length() {
 				hi := A_Index
-				n := needle[ni].joyid needle[ni].type needle[ni].Code
-				h := haystack[hi].joyid haystack[hi].type haystack[hi].Code
-				;out := n " = " h " ? "
-				if (n = h){
+				if (needle[ni].uid == haystack[hi].uid){
 					;OutputDebug % out "YES"
 					count++
 					if (Count = length){
