@@ -15,19 +15,17 @@ GuiClose:
 class MyClass {
 	__New(){
 		this.HotClass := new HotClass()
-		this.HotClass.AddHotkey("hk1", this.hk1Pressed.Bind(this), "w300 xm")
-		this.HotClass.AddHotkey("hk2", this.hk2Pressed.Bind(this), "w300 xm")
+		this.HotClass.AddHotkey("hk1", this.hkPressed.Bind(this, "hk1"), "w280 xm")
+		Gui, Add, Checkbox, Disabled hwndhwnd1 xp+290 yp+4
+		this.HotClass.AddHotkey("hk2", this.hkPressed.Bind(this, "hk2"), "w280 xm")
+		Gui, Add, Checkbox, Disabled hwndhwnd2 xp+290 yp+4
+		this.hStateChecks := {hk1: hwnd1, hk2: hwnd2}
 		Gui, Show, x0 y0
 	}
 	
 	; called when hk1 goes up or down.
-	hk1Pressed(event){
-		ToolTip % "HK1 " event, 0,200, 1
-	}
-	
-	; called when hk2 goes up or down.
-	hk2Pressed(event){
-		ToolTip % "HK2 " event, 0,220, 2
+	hkPressed(hk, event){
+		GuiControl,,% this.hStateChecks[hk], % event
 	}
 }
 
