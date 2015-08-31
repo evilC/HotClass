@@ -14,15 +14,17 @@ GuiClose:
 
 class MyClass {
 	__New(){
-		this.HotClass := new HotClass()
+		Gui, New, hwndhwnd
+		this.hwnd := hwnd
+		this.HotClass := new HotClass(hwnd)
 		this.HotClass.AddHotkey("hk1", this.hkPressed.Bind(this, "hk1"), "w280 xm")
-		Gui, Add, Checkbox, Disabled hwndhwnd1 xp+290 yp+4
+		Gui, % this.hwnd ":Add", Checkbox, Disabled hwndhwnd1 xp+290 yp+4
 		this.HotClass.AddHotkey("hk2", this.hkPressed.Bind(this, "hk2"), "w280 xm")
-		Gui, Add, Checkbox, Disabled hwndhwnd2 xp+290 yp+4
+		Gui, % this.hwnd ":Add", Checkbox, Disabled hwndhwnd2 xp+290 yp+4
 		this.HotClass.AddHotkey("hk3", this.hkPressed.Bind(this, "hk3"), "w280 xm")
-		Gui, Add, Checkbox, Disabled hwndhwnd3 xp+290 yp+4
+		Gui, % this.hwnd ":Add", Checkbox, Disabled hwndhwnd3 xp+290 yp+4
 		this.hStateChecks := {hk1: hwnd1, hk2: hwnd2, hk3: hwnd3}
-		Gui, Show, x0 y0
+		Gui, % this.hwnd ":Show", x0 y0
 	}
 	
 	; called when hk1 goes up or down.
@@ -43,13 +45,19 @@ class HotClass{
 	
 	; Constructor
 	; startactive param decides 
-	__New(options := 0){
+	__New(hwnd, options := 0){
 		this.STATES := {IDLE: 0, ACTIVE: 1, BIND: 2}		; State Name constants, for human readibility
 		this._HotkeyCache := []								; Length ordered array of keysets
 		this._HotkeyStates := {}							; Name indexed list of boolean state values
 		this._KeyCache := []								; Associative array of key uids
 		this._ActiveHotkeys := []							; Hotkeys currently in down state - for quick ObjHasKey matching
+		this._hwnd := hwnd
 		this._FuncEscTimer := this._EscTimer.Bind(this)
+		
+		Gui, New, hwndhwnd -Border
+		this._hDialog := hwnd
+		Gui, % this._hDialog ":Add", Text, Center, Bind Mode`n`nPress any combination of keys to bind.`n`nBinding finished on an up event.
+		;Gui, % this._hDialog ":Show"
 
 		; Set default options
 		if (!IsObject(options) || options == 0){
@@ -95,6 +103,7 @@ class HotClass{
 			out := ""
 			if (this._State == this.STATES.BIND){
 				; Transition from BIND state
+				Gui, % this._hDialog ":Hide"	; Hide Bind Mode dialog
 				; Build size-ordered list of hotkeys
 				out := ", ADDED " this._HeldKeys.length() " key combo hotkey"
 				this._BuildHotkeyCache()
@@ -107,6 +116,7 @@ class HotClass{
 			return 1
 		} else if (state == this.STATES.BIND ){
 			; Enter BIND state.
+			Gui, % this._hDialog ":Show"	; Show Bind Mode dialog
 			; args[1] = name of hotkey requesting state change
 			this.CInputDetector.EnableHooks()
 			if (args.length()){
@@ -349,7 +359,7 @@ class HotClass{
 			this.BindList := {}
 			this.Value := {}						; Holds the current binding
 			
-			Gui, % "Add", ComboBox, % "hwndhwnd AltSubmit " aParams[1], % this._MenuText
+			Gui, % this._handler._hwnd ":Add", ComboBox, % "hwndhwnd AltSubmit " aParams[1], % this._MenuText
 			this._hwnd := hwnd
 			this._hEdit := DllCall("GetWindow","PTR",this._hwnd,"Uint",5) ;GW_CHILD = 5
 			fn := this.OptionSelected.Bind(this)
