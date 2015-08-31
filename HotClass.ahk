@@ -120,6 +120,10 @@ class HotClass{
 	}
 
 	; Builds the quick lookup cache for _ProcessInput's ACTIVE state
+	/*
+	ToDo:
+	* Build list of all keys that are present in any keyset, so we can quickly filter out keys that are not relevant in _ProcessInput
+	*/
 	_BuildHotkeyCache(){
 		currentlength := 0
 		count := 0
@@ -230,23 +234,30 @@ class HotClass{
 							; Check if a subset hotkey was active
 							if (ObjHasKey(this._ActiveHotkeys, this._HotkeyCache[hk]._IsSuperSetOf[A_Index].name)){
 								; it got overridden, release it
+								OutputDebug % "releasing " this._HotkeyCache[hk]._IsSuperSetOf[A_Index].name " because " name " overrode it"
 								this._HotkeyChangedState(this._HotkeyCache[hk]._IsSuperSetOf[A_Index].name, 0)
 							}
 						}
+						OutputDebug % "pressing " name
 						this._HotkeyChangedState(name, 1)
 						break
 					}
 				}
 			} else {
 				; Up event in ACTIVE state - check active hotkeys for release
-				newhotkeys := this._ActiveHotkeys.clone()
 				for name, hotkey in this._ActiveHotkeys {
 					if (!this._CompareHotkeys(this._ActiveHotkeys[name], this._HeldKeys)){
-						newhotkeys.Remove(name)
+						; Check subset keysets to see if they are now valid
+						OutputDebug % "releasing " name
 						this._HotkeyChangedState(name, 0)
+						Loop % this._Hotkeys[name]._IsSuperSetOf.length(){
+							if (this._CompareHotkeys(this._Hotkeys[name]._IsSuperSetOf[A_Index].Value, this._HeldKeys)){
+								OutputDebug % "pressing " this._Hotkeys[name]._IsSuperSetOf[A_Index].Name " because " name " is no longer overriding it"
+								this._HotkeyChangedState(this._Hotkeys[name]._IsSuperSetOf[A_Index].Name, 1)
+							}
+						}
 					}
 				}
-				this._ActiveHotkeys := newhotkeys
 			}
 			;out .=  " Now " this._HeldKeys.length() " keys"
 		}
@@ -265,6 +276,7 @@ class HotClass{
 		} else {
 			OutputDebug % "TRIGGER UP: " name
 			;SoundBeep, 500, 150
+			this._ActiveHotkeys.Remove(name)
 			this._Hotkeys[name]._Callback.(0)
 		}
 	}
