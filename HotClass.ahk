@@ -14,16 +14,14 @@ GuiClose:
 
 class MyClass {
 	__New(){
-		Gui, New, hwndhwnd
-		this.hwnd := hwnd
-		this.HotClass := new HotClass(hwnd)
+		this.HotClass := new HotClass()
 		Loop % 12 {
 			name := "hk" A_Index
 			this.HotClass.AddHotkey(name, this.hkPressed.Bind(this, name), "w280 xm")
-			Gui, % this.hwnd ":Add", Checkbox, Disabled hwndhwnd xp+290 yp+4
+			Gui, Add, Checkbox, Disabled hwndhwnd xp+290 yp+4
 			this.hStateChecks[name] := hwnd
 		}
-		Gui, % this.hwnd ":Show", x0 y0
+		Gui, Show, x0 y0
 		
 		this.HotClass.DisableHotkeys()
 		this.HotClass.SetHotkey("hk1", [{type: "k", code: 30}])
@@ -59,7 +57,7 @@ class HotClass{
 	
 	; Constructor
 	; startactive param decides 
-	__New(hwnd, options := 0){
+	__New(options := 0){
 		this.STATES := {IDLE: 0, ACTIVE: 1, BIND: 2}		; State Name constants, for human readibility
 		this._HotkeyCache := []								; Length ordered array of keysets
 		this._HotkeyStates := {}							; Name indexed list of boolean state values
@@ -67,14 +65,14 @@ class HotClass{
 		this._ActiveHotkeys := []							; Hotkeys currently in down state - for quick ObjHasKey matching
 		this._Hotkeys := {}									; A name indexed array of hotkey objects
 
-		this._hwnd := hwnd
 		this._FuncEscTimer := this._EscTimer.Bind(this)
 		
+		Gui, +HwndOldDefaultHwnd	; store default gui
 		Gui, New, hwndhwnd -Border
 		this._hDialog := hwnd
 		Gui, % this._hDialog ":Add", Text, Center, Bind Mode`n`nPress any combination of keys to bind.`n`nBinding finished on an up event.
 		;Gui, % this._hDialog ":Show"
-
+		Gui, % OldDefaultHwnd ":Default"	; restore default Gui
 		; Set default options
 		if (!IsObject(options) || options == 0){
 			options := {StartActive: 1}
@@ -392,7 +390,7 @@ class HotClass{
 			this.BindList := {}
 			this.Value := {}						; Holds the current binding
 			
-			Gui, % this._handler._hwnd ":Add", ComboBox, % "hwndhwnd AltSubmit " aParams[1], % this._MenuText
+			Gui, Add, ComboBox, % "hwndhwnd AltSubmit " aParams[1], % this._MenuText
 			this._hwnd := hwnd
 			this._hEdit := DllCall("GetWindow","PTR",this._hwnd,"Uint",5) ;GW_CHILD = 5
 			fn := this.OptionSelected.Bind(this)
