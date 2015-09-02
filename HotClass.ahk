@@ -3,7 +3,7 @@
 
 OutputDebug, DBGVIEWCLEAR
 ;============================================================================================================
-; Example user script
+; Test script
 ;============================================================================================================
 #SingleInstance force
 mc := new MyClass()
@@ -17,13 +17,28 @@ class MyClass {
 		Gui, New, hwndhwnd
 		this.hwnd := hwnd
 		this.HotClass := new HotClass(hwnd)
-		Loop % 10 {
+		Loop % 12 {
 			name := "hk" A_Index
 			this.HotClass.AddHotkey(name, this.hkPressed.Bind(this, name), "w280 xm")
 			Gui, % this.hwnd ":Add", Checkbox, Disabled hwndhwnd xp+290 yp+4
 			this.hStateChecks[name] := hwnd
 		}
 		Gui, % this.hwnd ":Show", x0 y0
+		
+		this.HotClass.DisableHotkeys()
+		this.HotClass.SetHotkey("hk1", [{type: "k", code: 30}])
+		this.HotClass.SetHotkey("hk2", [{type: "k", code: 29},{type: "k", code: 30}])
+		this.HotClass.SetHotkey("hk3", [{type: "k", code: 42},{type: "k", code: 30}])
+		this.HotClass.SetHotkey("hk4", [{type: "k", code: 29},{type: "k", code: 42},{type: "k", code: 30}])
+		this.HotClass.SetHotkey("hk5", [{type: "k", code: 31}])
+		this.HotClass.SetHotkey("hk6", [{type: "k", code: 29},{type: "k", code: 31}])
+		this.HotClass.SetHotkey("hk7", [{type: "k", code: 42},{type: "k", code: 31}])
+		this.HotClass.SetHotkey("hk8", [{type: "k", code: 29},{type: "k", code: 42},{type: "k", code: 31}])
+		this.HotClass.SetHotkey("hk9", [{type: "k", code: 29},{type: "k", code: 42}])
+		this.HotClass.SetHotkey("hk10", [{type: "k", code: 56},{type: "k", code: 29},{type: "k", code: 42},{type: "k", code: 30}])
+		this.HotClass.SetHotkey("hk11", [{type: "k", code: 29},{type: "m", code: 1}])
+		this.HotClass.SetHotkey("hk12", [{type: "m", code: 4},{type: "h", joyid: 2, code: 1}])
+		this.HotClass.EnableHotkeys()
 	}
 	
 	; called when hk1 goes up or down.
@@ -50,6 +65,8 @@ class HotClass{
 		this._HotkeyStates := {}							; Name indexed list of boolean state values
 		this._KeyCache := []								; Associative array of key uids
 		this._ActiveHotkeys := []							; Hotkeys currently in down state - for quick ObjHasKey matching
+		this._Hotkeys := {}									; A name indexed array of hotkey objects
+
 		this._hwnd := hwnd
 		this._FuncEscTimer := this._EscTimer.Bind(this)
 		
@@ -68,16 +85,44 @@ class HotClass{
 
 		; Initialize state
 		if (options.StartActive){
-			this.ChangeState(this.STATES.ACTIVE)
+			this._ChangeState(this.STATES.ACTIVE)
 		} else {
-			this.ChangeState(this.STATES.IDLE)
+			this._ChangeState(this.STATES.IDLE)
 		}
 		
 	}
 	
+	; User command to add a new hotkey
+	AddHotkey(name, callback, aParams*){
+		; ToDo: Ensure unique name
+		this._Hotkeys[name] := new this._Hotkey(this, name, callback, aParams*)
+	}
+
+	EnableHotkeys(){
+		; set state of hotkey class
+		;this._Hotkeys[this._BindName].SetBinding(this._HeldKeys)
+		
+		; Trigger state change
+		this._ChangeState(this.STATES.ACTIVE)
+	}
+	
+	DisableHotkeys(){
+		;this._handler._ChangeState(this._handler.STATES.IDLE, this.Name)
+		this._ChangeState(this.STATES.IDLE, this.Name)
+	}
+
+	SetHotkey(name, value){
+		Loop % value.length(){
+			if (!ObjHasKey(value[A_Index], "uid")){
+				value[A_Index].uid := value[A_Index].joyid value[A_Index].type value[A_Index].code
+			}
+		}
+		this._Hotkeys[name].SetBinding(value)
+	}
+	
 	; Handles all state transitions
 	; Returns 1 if we transitioned to the specified state, 0 if not
-	ChangeState(state, args*){
+	_ChangeState(state, args*){
 		if (state == this._State){
 			return 1
 		}
@@ -89,29 +134,27 @@ class HotClass{
 		; Decide what to do, based upon state we wish to transition to
 		if (state == this.STATES.IDLE){
 			; Go idle / initialize, no args required
+			OutputDebug % "ENTERED IDLE STATE"
 			this.CInputDetector.DisableHooks()
 			this._State := state
 			this._BindName := ""					; The name of the hotkey that is being bound
-			this._Hotkeys := {}						; a name indexed array of hotkey objects
 			this._HeldKeys := []					; The keys that are currently held
 			this._ActiveHotkeys := {}				; Hotkeys which are currently in a down state
-			;OutputDebug % "ENTERED IDLE STATE"
 			return 1
 		} else if (state == this.STATES.ACTIVE ){
 			; Enter ACTIVE state, no args required
-			out := ""
+			OutputDebug % "ENTERED ACTIVE STATE" out
 			if (this._State == this.STATES.BIND){
 				; Transition from BIND state
 				Gui, % this._hDialog ":Hide"	; Hide Bind Mode dialog
-				; Build size-ordered list of hotkeys
-				out := ", ADDED " this._HeldKeys.length() " key combo hotkey"
-				this._BuildHotkeyCache()
 			}
-			this.CInputDetector.EnableHooks()
+			; Build size-ordered list of hotkeys
+			this._BuildHotkeyCache()
+			; Reset Vars
 			this._HeldKeys := []
 			this._ActiveHotkeys := {}
 			this._State := state
-			;OutputDebug % "ENTERED ACTIVE STATE" out
+			this.CInputDetector.EnableHooks()
 			return 1
 		} else if (state == this.STATES.BIND ){
 			; Enter BIND state.
@@ -119,10 +162,10 @@ class HotClass{
 			; args[1] = name of hotkey requesting state change
 			this.CInputDetector.EnableHooks()
 			if (args.length()){
+				OutputDebug % "ENTERED BINDING STATE FOR HOTKEY NAME: " args[1]
 				this._HeldKeys := []
 				this._BindName := args[1]
 				this._State := state
-				;OutputDebug % "ENTERED BINDING STATE FOR HOTKEY NAME: " args[1]
 				return 1
 			}
 		}
@@ -234,7 +277,9 @@ class HotClass{
 				this._Hotkeys[this._BindName].SetBinding(this._HeldKeys)
 				
 				; Trigger state change
-				this.ChangeState(this.STATES.ACTIVE)
+				;this._ChangeState(this.STATES.ACTIVE)
+				
+				this.EnableHotkeys()
 
 			}
 			return 1 ; block input
@@ -301,7 +346,6 @@ class HotClass{
 		return 0 ; don't block input
 	}
 	
-	
 	; All of needle must be in haystack
 	_CompareHotkeys(needle, haystack){
 		length := needle.length()
@@ -328,16 +372,10 @@ class HotClass{
 		return 0
 	}
 	
-	; User command to add a new hotkey
-	AddHotkey(name, callback, aParams*){
-		; ToDo: Ensure unique name
-		this._Hotkeys[name] := new this._Hotkey(this, name, callback, aParams*)
-	}
-	
 	; Called on a Timer to detect timeout of Escape key in Bind Mode
 	_EscTimer(){
 		this._BindList := {}
-		this.ChangeState(this.STATES.ACTIVE)
+		this._ChangeState(this.STATES.ACTIVE)
 	}
 	
 	; ============================================================================================================================
@@ -366,7 +404,7 @@ class HotClass{
 			GuiControlGet, option,, % this._hwnd
 			GuiControl, Choose, % this._hwnd, 0
 			if (option = 1){
-				this._handler.ChangeState(this._handler.STATES.BIND, this.Name)
+				this._handler._ChangeState(this._handler.STATES.BIND, this.Name)
 			} else if (option = 2){
 				;ToolTip Wild Option Changed
 				this.Wild := !this.Wild
