@@ -17,6 +17,8 @@ class HotClass{
 		this._Hotkeys := {}									; A name indexed array of hotkey objects
 		this.EnforceOrder := 0								; Order keys must be in
 		this._FuncEscTimer := this._EscTimer.Bind(this)
+		this._HeldUIDs := {}								; Associative array of held UIDs
+		this._HeldKeys := []								; Indexed array of held key objects
 		
 		Gui, +HwndOldDefaultHwnd	; store default gui
 		Gui, New, hwndhwnd -Border
@@ -86,9 +88,10 @@ class HotClass{
 			OutputDebug % "ENTERED IDLE STATE"
 			this.CInputDetector.DisableHooks()
 			this._State := state
-			this._BindName := ""					; The name of the hotkey that is being bound
-			this._HeldKeys := []					; The keys that are currently held
-			this._ActiveHotkeys := {}				; Hotkeys which are currently in a down state
+			this._BindName := ""
+			this._HeldKeys := []
+			this._HeldUIDs := {}
+			this._ActiveHotkeys := {}
 			return 1
 		} else if (state == this.STATES.ACTIVE ){
 			; Enter ACTIVE state, no args required
@@ -101,6 +104,7 @@ class HotClass{
 			this._BuildHotkeyCache()
 			; Reset Vars
 			this._HeldKeys := []
+			this._HeldUIDs := {}
 			this._ActiveHotkeys := {}
 			this._State := state
 			this.CInputDetector.EnableHooks()
@@ -113,6 +117,7 @@ class HotClass{
 			if (args.length()){
 				OutputDebug % "ENTERED BINDING STATE FOR HOTKEY NAME: " args[1]
 				this._HeldKeys := []
+				this._HeldUIDs := {}
 				this._BindName := args[1]
 				this._State := state
 				return 1
@@ -189,18 +194,23 @@ class HotClass{
 		; Update list of held keys, filter repeat events
 		if (keyevent.event){
 			; Down event - add keys.
-			if (this._CompareHotkeys([keyevent], this._HeldKeys)){
+			;if (this._CompareHotkeys([keyevent], this._HeldKeys)){
+			if (ObjHasKey(this._HeldUIDs, keyevent.uid)){
 				; repeat down event
 				return 0
 			}
 			this._HeldKeys.push(keyevent)
+			this._HeldUIDs[keyevent.uid] := 1
 		} else if (this._State != this.STATES.BIND) {
 			; Up Event - remove keys
 			; In Bind mode, an up event triggers the end of binding.
 			; Therefore, do not remove the key from _HeldKeys that triggered the end (it's one of the bound keys).
-			pos := this._CompareHotkeys([keyevent], this._HeldKeys)
-			if (pos){
-				this._HeldKeys.Remove(pos)
+			if (ObjHasKey(this._HeldUIDs, keyevent.uid)){
+				pos := this._CompareHotkeys([keyevent], this._HeldKeys)
+				if (pos){
+					this._HeldKeys.Remove(pos)
+				}
+				this._HeldUIDs.Delete(keyevent.uid)
 			}
 		}
 		OutputDebug % keyevent.uid " " keyevent.event
@@ -300,6 +310,7 @@ class HotClass{
 	; All of needle must be in haystack
 	_CompareHotkeys(needle, haystack){
 		last_haystack := 0
+		first_haystack := 0
 		max_haystack := 1
 		length := needle.length()
 		Count := 0
@@ -312,21 +323,26 @@ class HotClass{
 				if (needle[ni].uid == haystack[hi].uid){
 					if (this.EnforceOrder = 1 && count == length-1){
 						if (hi < max_haystack){
-							OutputDebug % hi " < " max_haystack
 							return 0
 						}
 					}
-					if (this.EnforceOrder > 1 && hi < last_haystack){
+					if (this.EnforceOrder = 2 && hi < last_haystack){
 						return 0
 					}
-					;if (this.EnforceOrder > 2 && hi != (last_haystack + 1)){
-					;	continue
-					;}
+					/*
+					if (this.EnforceOrder = 3 && hi != (last_haystack + 1)){
+						if (!first_haystack){
+							first_haystack := hi
+						}
+						OutputDebug % hi " != " last_haystack + 1
+						return 0
+					}
+					*/
 					count++
 					if (Count = length){
 						break
 					}
-					last_haystack := hi
+					last_haystack := hi - first_haystack - 1
 					if (hi > max_haystack){
 						max_haystack := hi
 					}
