@@ -27,7 +27,7 @@ class TestHarness {
 		; 1 = End key must match
 		; 2 = Order must match (may be keys inbeteen)
 		; 3 = Absolute order (no keys inbetween)
-		this.HotClass.EnforceOrder := 0
+		this.HotClass.EnforceOrder := 2
 		Loop % 12 {
 			this.HotkeyStates[A_Index] := 1
 			name := "hk" A_Index

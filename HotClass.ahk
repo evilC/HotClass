@@ -15,7 +15,7 @@ class HotClass{
 		this._KeyCache := []								; Associative array of key uids
 		this._ActiveHotkeys := []							; Hotkeys currently in down state - for quick ObjHasKey matching
 		this._Hotkeys := {}									; A name indexed array of hotkey objects
-
+		this.EnforceOrder := 0								; Order keys must be in
 		this._FuncEscTimer := this._EscTimer.Bind(this)
 		
 		Gui, +HwndOldDefaultHwnd	; store default gui
@@ -313,11 +313,11 @@ class HotClass{
 					if (this.EnforceOrder = 1 && count == length-1){
 						if (hi < max_haystack){
 							OutputDebug % hi " < " max_haystack
-							continue
+							return 0
 						}
 					}
 					if (this.EnforceOrder > 1 && hi < last_haystack){
-						continue
+						return 0
 					}
 					;if (this.EnforceOrder > 2 && hi != (last_haystack + 1)){
 					;	continue
