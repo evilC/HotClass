@@ -54,7 +54,7 @@ class TestHarness {
 		this.HotClass.SetHotkey("hk4", [keys.ctrl,keys.shift,keys.a])
 		this.HotClass.SetHotkey("hk5", [keys.s])
 		this.HotClass.SetHotkey("hk6", [keys.ctrl,keys.s])
-		;this.HotClass.SetHotkey("hk7", [keys.shift,keys.s])
+		this.HotClass.SetHotkey("hk7", [keys.shift,keys.s])
 		this.HotClass.SetHotkey("hk8", [keys.ctrl,keys.shift,keys.s])
 		this.HotClass.SetHotkey("hk9", [keys.ctrl,keys.shift])
 		this.HotClass.SetHotkey("hk10", [keys.alt,keys.ctrl,keys.shift,keys.a])
@@ -62,21 +62,50 @@ class TestHarness {
 		this.HotClass.SetHotkey("hk12", [{type: "m", code: 4},{type: "h", joyid: 2, code: 1}])
 		this.HotClass.EnableHotkeys()
 		
-		/*
 		; Perform Automated Tests
+		; Press A+S
 		this.TestInput(keys.a,1).TestInput(keys.s,1)
-		this.Assert(1, true, "TEST 1 FAIL: hk1 not pressed")
+		this.Assert(1, true, "1")
+		this.Assert(5, true, "1")
+		
+		; Press CTRL
 		this.TestInput(keys.ctrl,1)
-		this.Assert(1, false, "TEST 2 FAIL: hk1 Not released")
-		this.Assert(2, true, "TEST 3 FAIL: hk2 not pressed")
-		this.Assert(6, true, "TEST 4 FAIL: hk6 not pressed")
-
+		this.Assert(1, false, "2")
+		this.Assert(2, true, "2")
+		this.Assert(6, true, "3")
+		
+		; Press Shift
 		this.TestInput(keys.shift,1)
-		this.Assert(2, false, "TEST 5 FAIL: hk2 Not released")
-		;this.TestInput(keys.ctrl,0).TestInput(keys.a,0)
-		;this.Assert(1, false, "TEST 5 FAIL: hk1 not released")
-		;this.Assert(2, false, "TEST 6 FAIL: hk2 not released")
-		*/
+		this.Assert(4, true, "4")
+		this.Assert(7, true, "4")
+		this.Assert(2, false, "4")
+		this.Assert(6, false, "4")
+		
+		; Press Alt
+		this.TestInput(keys.alt,1)
+		this.Assert(9, true, "5")
+		this.Assert(4, false, "5")
+		
+		; Release Alt
+		this.TestInput(keys.alt,0)
+		this.Assert(3, true, "6")
+		
+		; Release A+S
+		this.TestInput(keys.a, 0).TestInput(keys.s, 0)
+		this.Assert(9, true, "7")
+		
+		; Press A
+		this.TestInput(keys.a, 1)
+		this.Assert(9, false, "7")
+		this.Assert(4, true, "7")
+		
+		; Release Ctrl + Shift
+		this.TestInput(keys.ctrl, 0).TestInput(keys.shift, 0)
+		this.Assert(1, true, "8")
+		
+		; Release A
+		this.TestInput(keys.a, 0)
+		this.Assert(1, false, "9")
 	}
 	
 	; called when hk1 goes up or down.
@@ -86,11 +115,12 @@ class TestHarness {
 		this.HotkeyStates[hk] := event
 	}
 	
-	Assert(hk, state, description){
+	Assert(hk, state, testid){
+		sleep 100
 		if (this.HotkeyStates[hk] = state){
 			return 1
 		} else {
-			msgbox % description
+			msgbox % "Test " testid " FAIL:`nHotkey: hk" hk "`nExpected State: " state "`nActual State: " this.HotkeyStates[hk]
 		return 0
 		}
 	}
