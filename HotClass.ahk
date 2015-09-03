@@ -300,6 +300,7 @@ class HotClass{
 	; All of needle must be in haystack
 	_CompareHotkeys(needle, haystack){
 		last_haystack := 0
+		max_haystack := 1
 		length := needle.length()
 		Count := 0
 		; Loop through elements of the needle
@@ -309,15 +310,26 @@ class HotClass{
 			Loop % haystack.length() {
 				hi := A_Index
 				if (needle[ni].uid == haystack[hi].uid){
-					if (this.EnforceOrder && hi < last_haystack){
+					if (this.EnforceOrder = 1 && count == length-1){
+						if (hi < max_haystack){
+							OutputDebug % hi " < " max_haystack
+							continue
+						}
+					}
+					if (this.EnforceOrder > 1 && hi < last_haystack){
 						continue
 					}
-					;OutputDebug % out "YES"
+					;if (this.EnforceOrder > 2 && hi != (last_haystack + 1)){
+					;	continue
+					;}
 					count++
 					if (Count = length){
 						break
 					}
 					last_haystack := hi
+					if (hi > max_haystack){
+						max_haystack := hi
+					}
 				}
 			}
 		}

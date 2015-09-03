@@ -22,9 +22,14 @@ class TestHarness {
 	__New(){
 		this.HotkeyStates := []
 		this.HotClass := new HotClass()
+		; Order
+		; 0 = Off
+		; 1 = End key must match
+		; 2 = Order must match (may be keys inbeteen)
+		; 3 = Absolute order (no keys inbetween)
 		this.HotClass.EnforceOrder := 0
 		Loop % 12 {
-			this.HotkeyStates[A_Index] := 0
+			this.HotkeyStates[A_Index] := 1
 			name := "hk" A_Index
 			this.HotClass.AddHotkey(name, this.hkPressed.Bind(this, A_Index), "w280 xm")
 			Gui, Add, Checkbox, Disabled hwndhwnd xp+290 yp+4
