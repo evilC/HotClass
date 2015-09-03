@@ -62,6 +62,10 @@ class TestHarness {
 		this.HotClass.SetHotkey("hk12", [{type: "m", code: 4},{type: "h", joyid: 2, code: 1}])
 		this.HotClass.EnableHotkeys()
 		
+		;this.DoTests()
+	}
+	
+	DoTests(){
 		; Perform Automated Tests
 		; Press A+S
 		this.TestInput(keys.a,1).TestInput(keys.s,1)

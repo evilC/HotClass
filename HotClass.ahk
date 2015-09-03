@@ -342,7 +342,7 @@ class HotClass{
 					if (Count = length){
 						break
 					}
-					last_haystack := hi - first_haystack - 1
+					last_haystack := hi
 					if (hi > max_haystack){
 						max_haystack := hi
 					}
