@@ -1,5 +1,3 @@
-#include CInputDetector.ahk
-
 ;------------------------------------------------------------------------------------------------------------
 ; Class that manages ALL hotkeys for the script
 ;------------------------------------------------------------------------------------------------------------
@@ -32,7 +30,7 @@ class HotClass{
 		}
 		
 		; Initialize the Library that detects input.
-		this.CInputDetector := new CInputDetector(this._ProcessInput.Bind(this))
+		this.CInputDetector := new this.CInputDetector(this._ProcessInput.Bind(this))
 
 		; Initialize state
 		if (options.StartActive){
@@ -474,4 +472,6 @@ class HotClass{
 		}
 		return out
 	}
+	
+	#include <CInputDetector>
 }
