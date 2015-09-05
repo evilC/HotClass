@@ -2,7 +2,11 @@
 ; Sets up the hooks etc to watch for input
 ;------------------------------------------------------------------------------------------------------------
 class CInputDetector {
-	__New(callback){
+	__New(callback, options := 0){
+		if (options = 0){
+			options := {}
+		}
+		this.options := options
 		this._HooksEnabled := 0
 		this._Callback := callback
 		
@@ -33,9 +37,12 @@ class CInputDetector {
 					hotkey, % joyid "Joy" A_Index, % fn
 					hotkey, % joyid "Joy" A_Index, On
 				}
-				; Watch POVs
-				if (instr(joyinfo, "p")){
-					this._JoysticksWithHats.push(joyid)
+				; disablejoystick option is useful when debugging, so you do not keep getting interrupted by the settimer.
+				if (this.options.disablejoystickhats != 1){
+					; Watch POVs
+					if (instr(joyinfo, "p")){
+						this._JoysticksWithHats.push(joyid)
+					}
 				}
 			}
 		}

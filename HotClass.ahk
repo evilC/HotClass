@@ -28,9 +28,14 @@ class HotClass{
 		if (!IsObject(options) || options == 0){
 			options := {StartActive: 1}
 		}
-		
+
+		; Disabling joystick hats aids debugging, as hats are detected using a timer.
+		opt := {}
+		if (options.disablejoystickhats = 1){
+			opt.disablejoystickhats := 1
+		}
 		; Initialize the Library that detects input.
-		this.CInputDetector := new this.CInputDetector(this._ProcessInput.Bind(this))
+		this.CInputDetector := new this.CInputDetector(this._ProcessInput.Bind(this), opt)
 
 		; Initialize state
 		if (options.StartActive){
