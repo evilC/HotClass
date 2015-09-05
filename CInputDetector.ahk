@@ -38,16 +38,16 @@ class CInputDetector {
 					hotkey, % joyid "Joy" A_Index, On
 				}
 				; disablejoystick option is useful when debugging, so you do not keep getting interrupted by the settimer.
-				if (this.options.disablejoystickhats != 1){
-					; Watch POVs
-					if (instr(joyinfo, "p")){
-						this._JoysticksWithHats.push(joyid)
-					}
+				; Watch POVs
+				if (instr(joyinfo, "p")){
+					this._JoysticksWithHats.push(joyid)
 				}
 			}
 		}
-		fn := this._WatchJoystickPOV.Bind(this)
-		SetTimer, % fn, 10
+		if (this.options.disablejoystickhats != 1){
+			fn := this._WatchJoystickPOV.Bind(this)
+			SetTimer, % fn, 10
+		}
 		return 1
 	}
 	
