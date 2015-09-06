@@ -17,17 +17,28 @@ class HotClass{
 		this._FuncEscTimer := this._EscTimer.Bind(this)
 		this._HeldUIDs := {}								; Associative array of held UIDs
 		this._HeldKeys := []								; Indexed array of held key objects
+
+		; Set default options
+		if (!IsObject(options) || options == 0){
+			options := {StartActive: 1}
+		} else {
+			if (!ObjHasKey(options, "StartActive")){
+				options.StartActive := 1
+			}
+		}
 		
+		; Set callback
+		if (IsObject(options.OnChangeCallback)){
+			this._OnChangeCallback := options.OnChangeCallback
+		}
+		
+		; Create Bind Mode popup Gui
 		Gui, +HwndOldDefaultHwnd	; store default gui
 		Gui, New, hwndhwnd -Border
 		this._hDialog := hwnd
 		Gui, % this._hDialog ":Add", Text, Center, Bind Mode`n`nPress any combination of keys to bind.`n`nBinding finished on an up event.
 		;Gui, % this._hDialog ":Show"
 		Gui, % OldDefaultHwnd ":Default"	; restore default Gui
-		; Set default options
-		if (!IsObject(options) || options == 0){
-			options := {StartActive: 1}
-		}
 
 		; Disabling joystick hats aids debugging, as hats are detected using a timer.
 		opt := {}
@@ -216,7 +227,7 @@ class HotClass{
 				this._HeldUIDs.Delete(keyevent.uid)
 			}
 		}
-		OutputDebug % keyevent.uid " " keyevent.event
+		;OutputDebug % keyevent.uid " " keyevent.event
 		
 		;OutputDebug % "EVENT: " this._RenderHotkey(keyevent) " " state[keyevent.event]
 		if (this._State == this.STATES.BIND){
@@ -410,6 +421,9 @@ class HotClass{
 			this.BindList := BindList
 			this.Value := BindList
 			DllCall("User32.dll\SendMessageW", "Ptr", this._hEdit, "Uint", EM_SETCUEBANNER, "Ptr", True, "WStr", this.BuildHumanReadable(BindList))
+			if (IsObject(this._handler._OnChangeCallback)){
+				this._handler._OnChangeCallback.(this.Name, this.Value)
+			}
 		}
 		
 		; Builds a human readable string from a hotkey object
