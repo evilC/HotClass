@@ -172,6 +172,11 @@ class HotClass{
 			; Iterate through clone of hotkey list, decrementing currentlength each time
 			new_hotkeys := hotkeys.clone()
 			for name, hotkey in hotkeys {
+				if (!hotkey.Value.length()){
+					; Protect against empty values in list
+					Count--
+					continue
+				}
 				; check if length matches currentlength
 				if (hotkey.Value.length() = currentlength){
 					; Find out if any of the previously added hotkeys are a superset of this one.
