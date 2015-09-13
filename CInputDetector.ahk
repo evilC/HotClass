@@ -9,6 +9,7 @@ class CInputDetector {
 		this.options := options
 		this._HooksEnabled := 0
 		this._Callback := callback
+		this._JoyUpFuncs := []
 		
 		this.EnableHooks()
 	}
@@ -37,6 +38,7 @@ class CInputDetector {
 					hotkey, % joyid "Joy" A_Index, % fn
 					hotkey, % joyid "Joy" A_Index, On
 				}
+				this._JoyUpFuncs[joyid] := []
 				; disablejoystick option is useful when debugging, so you do not keep getting interrupted by the settimer.
 				; Watch POVs
 				if (instr(joyinfo, "p")){
@@ -87,11 +89,19 @@ class CInputDetector {
 	
 	; Emulate up events for joystick buttons
 	_WaitForJoyUp(joyid, btn){
+		fn := this.__WaitForJoyUp.Bind(this, joyid, btn)
+		this._JoyUpFuncs[joyid, btn] := fn
+		SetTimer, % fn, 10
+	}
+	
+	__WaitForJoyUp(joyid, btn){
 		str := joyid "Joy" btn
-		while (GetKeyState(str)){
-			sleep 10
+		if (!GetKeyState(str)){
+			fn := this._JoyUpFuncs[joyid, btn]
+			SetTimer, % fn, Off
+			this._Callback.({Type: "j", Code: btn, joyid: joyid, event: 0, uid: joyid "j" btn})
 		}
-		this._Callback.({Type: "j", Code: btn, joyid: joyid, event: 0, uid: joyid "j" btn})
+		
 	}
 	
 	; A constantly running timer to emulate "button events" for Joystick POV directions (eg 2JoyPOVU, 2JoyPOVD...)
@@ -139,10 +149,9 @@ class CInputDetector {
 		Extended := NumGet(lParam+0, 8, "UInt") & 1
 		sc := (Extended<<8)|NumGet(lParam+0, 4, "UInt")
 		sc := sc = 0x136 ? 0x36 : sc
-        ;key:=GetKeyName(Format("vk{1:x}sc{2:x}", vk,sc))
 		event := wParam = WM_SYSKEYDOWN || wParam = WM_KEYDOWN
 		
-        if ( sc != 541 ){		; ignore non L/R Control. This key never happens except eg with RALT
+		if ( sc != 541 ){		; ignore non L/R Control. This key never happens except eg with RALT
 			block := this._Callback.({ Type: "k", Code: sc, event: event, uid: "k" sc})
 			if (block){
 				return 1
@@ -226,5 +235,4 @@ class CInputDetector {
 	_UnhookWindowsHookEx(idHook){
 		Return DllCall("UnhookWindowsHookEx", "Ptr", idHook)
 	}
-
 }
