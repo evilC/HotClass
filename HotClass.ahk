@@ -61,6 +61,7 @@ class HotClass{
 	AddHotkey(name, callback, aParams*){
 		; ToDo: Ensure unique name
 		this._Hotkeys[name] := new this._Hotkey(this, name, callback, aParams*)
+		return this._Hotkeys[name]
 	}
 
 	EnableHotkeys(){
@@ -154,11 +155,11 @@ class HotClass{
 			hotkey._IsSubSetOf := []		; Array that holds other hotkeys that this hotkey is a subset of
 			hotkey._IsSuperSetOf := []		; Array that holds other hotkeys that this hotkey is a superset of
 			this._HotkeyStates[name] := 0	; Initialize state
-			if (hotkey.Value.length() > currentlength){
-				currentlength := hotkey.Value.length()
+			if (hotkey.BindList.length() > currentlength){
+				currentlength := hotkey.BindList.length()
 			}
-			Loop % hotkey.Value.length() {
-				this._KeyCache[hotkey.Value[A_Index].uid] := 1
+			Loop % hotkey.BindList.length() {
+				this._KeyCache[hotkey.BindList[A_Index].uid] := 1
 			}
 		}
 		
@@ -172,17 +173,17 @@ class HotClass{
 			; Iterate through clone of hotkey list, decrementing currentlength each time
 			new_hotkeys := hotkeys.clone()
 			for name, hotkey in hotkeys {
-				if (!hotkey.Value.length()){
+				if (!hotkey.BindList.length()){
 					; Protect against empty values in list
 					Count--
 					continue
 				}
 				; check if length matches currentlength
-				if (hotkey.Value.length() = currentlength){
+				if (hotkey.BindList.length() = currentlength){
 					; Find out if any of the previously added hotkeys are a superset of this one.
 					Loop % this._HotkeyCache.length(){
 						; Check this hotkey against the one in the cache
-						if (this._CompareHotkeys(hotkey.Value,this._HotkeyCache[A_Index].Value)){
+						if (this._CompareHotkeys(hotkey.BindList,this._HotkeyCache[A_Index].BindList)){
 							hotkey._IsSubSetOf.push(this._HotkeyCache[A_Index])
 							this._HotkeyCache[A_Index]._IsSuperSetOf.push(hotkey)
 						}
@@ -274,7 +275,7 @@ class HotClass{
 			; Loop through hotkeys, longest to shortest.
 			Loop % this._HotkeyCache.length(){
 				main_name := this._HotkeyCache[A_Index].name
-				if (this._CompareHotkeys(this._Hotkeys[main_name].Value, this._HeldKeys)){
+				if (this._CompareHotkeys(this._Hotkeys[main_name].BindList, this._HeldKeys)){
 					; hotkey matches
 					; check if hotkey is overridden
 					brk := 0
@@ -290,7 +291,7 @@ class HotClass{
 					if (!brk){
 						;OutputDebug % "MATCH: " main_name
 						hotkey_delta[main_name] := 1
-						this._ActiveHotkeys[main_name] := this._Hotkeys[main_name].Value
+						this._ActiveHotkeys[main_name] := this._Hotkeys[main_name].BindList
 						
 					} else {
 						; does not match.
@@ -393,13 +394,25 @@ class HotClass{
 			this._Callback := callback
 			this.Name := name
 			this.BindList := {}
-			this.Value := {}						; Holds the current binding
 			
 			Gui, Add, ComboBox, % "hwndhwnd AltSubmit " aParams[1], % this._MenuText
 			this._hwnd := hwnd
 			this._hEdit := DllCall("GetWindow","PTR",this._hwnd,"Uint",5) ;GW_CHILD = 5
 			fn := this.OptionSelected.Bind(this)
 			GuiControl +g, % hwnd, % fn
+		}
+		
+		; .value Getters and Setters.
+		; Get of .value returns BindList property
+		; Set of .value sets hotkey state from Object in BindList format
+		value[]{
+			get {
+				return this.BindList
+			}
+			
+			set {
+				return this.SetBinding(value)
+			}
 		}
 		
 		; An option was selected in the drop-down list
@@ -420,14 +433,20 @@ class HotClass{
 			}
 		}
 
-		; Setter
+		; Change setting of hotkey
 		SetBinding(BindList){
 			static EM_SETCUEBANNER:=0x1501
+			; Remove event property from keys - not required
+			Loop % BindList.length(){
+				BindList[A_Index].Delete("event")
+			}
+			; Set new value
 			this.BindList := BindList
-			this.Value := BindList
+			; Update GuiControl
 			DllCall("User32.dll\SendMessageW", "Ptr", this._hEdit, "Uint", EM_SETCUEBANNER, "Ptr", True, "WStr", this.BuildHumanReadable(BindList))
+			; Fire OnChange callback
 			if (IsObject(this._handler._OnChangeCallback)){
-				this._handler._OnChangeCallback.(this.Name, this.Value)
+				this._handler._OnChangeCallback.(this.Name, this.BindList)
 			}
 		}
 		
