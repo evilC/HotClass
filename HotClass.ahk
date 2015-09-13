@@ -388,7 +388,7 @@ class HotClass{
 	; Each hotkey is an instance of this class.
 	; Handles the Gui control and routing of callbacks when the hotkey triggers
 	class _Hotkey {
-		static _MenuText := "Select new Binding|Toggle Wild (*) |Toggle PassThrough (~)|Remove Binding"
+		static _MenuText := "Select new Binding|UNIMPLEMENTED: Toggle Wild (*) |UNIMPLEMENTED: Toggle PassThrough (~)|Remove Binding"
 		__New(handler, name, callback, aParams*){
 			this._handler := handler
 			this._Callback := callback
@@ -420,16 +420,17 @@ class HotClass{
 			GuiControlGet, option,, % this._hwnd
 			GuiControl, Choose, % this._hwnd, 0
 			if (option = 1){
+				; Set new binding
 				this._handler._ChangeState(this._handler.STATES.BIND, this.Name)
 			} else if (option = 2){
-				;ToolTip Wild Option Changed
+				; Wild Option Changed
 				this.Wild := !this.Wild
 			} else if (option = 3){
-				;ToolTip PassThrough Option Changed
+				; PassThrough Option Changed
 				this.PassThrough := !this.PassThrough
 			} else if (option = 4){
-				;ToolTip Remove Binding
-				
+				; Remove Binding
+				this.SetBinding({})
 			}
 		}
 
