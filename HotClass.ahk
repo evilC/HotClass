@@ -155,11 +155,11 @@ class HotClass{
 			hotkey._IsSubSetOf := []		; Array that holds other hotkeys that this hotkey is a subset of
 			hotkey._IsSuperSetOf := []		; Array that holds other hotkeys that this hotkey is a superset of
 			this._HotkeyStates[name] := 0	; Initialize state
-			if (hotkey.BindList.length() > currentlength){
-				currentlength := hotkey.BindList.length()
+			if (hotkey._value.keys.length() > currentlength){
+				currentlength := hotkey._value.keys.length()
 			}
-			Loop % hotkey.BindList.length() {
-				this._KeyCache[hotkey.BindList[A_Index].uid] := 1
+			Loop % hotkey._value.keys.length() {
+				this._KeyCache[hotkey._value.keys[A_Index].uid] := 1
 			}
 		}
 		
@@ -173,17 +173,17 @@ class HotClass{
 			; Iterate through clone of hotkey list, decrementing currentlength each time
 			new_hotkeys := hotkeys.clone()
 			for name, hotkey in hotkeys {
-				if (!hotkey.BindList.length()){
+				if (!hotkey._value.keys.length()){
 					; Protect against empty values in list
 					Count--
 					continue
 				}
 				; check if length matches currentlength
-				if (hotkey.BindList.length() = currentlength){
+				if (hotkey._value.keys.length() = currentlength){
 					; Find out if any of the previously added hotkeys are a superset of this one.
 					Loop % this._HotkeyCache.length(){
 						; Check this hotkey against the one in the cache
-						if (this._CompareHotkeys(hotkey.BindList,this._HotkeyCache[A_Index].BindList)){
+						if (this._CompareHotkeys(hotkey._value.keys,this._HotkeyCache[A_Index]._value.keys)){
 							hotkey._IsSubSetOf.push(this._HotkeyCache[A_Index])
 							this._HotkeyCache[A_Index]._IsSuperSetOf.push(hotkey)
 						}
@@ -275,7 +275,7 @@ class HotClass{
 			; Loop through hotkeys, longest to shortest.
 			Loop % this._HotkeyCache.length(){
 				main_name := this._HotkeyCache[A_Index].name
-				if (this._CompareHotkeys(this._Hotkeys[main_name].BindList, this._HeldKeys)){
+				if (this._CompareHotkeys(this._Hotkeys[main_name]._value.keys, this._HeldKeys)){
 					; hotkey matches
 					; check if hotkey is overridden
 					brk := 0
@@ -291,7 +291,7 @@ class HotClass{
 					if (!brk){
 						;OutputDebug % "MATCH: " main_name
 						hotkey_delta[main_name] := 1
-						this._ActiveHotkeys[main_name] := this._Hotkeys[main_name].BindList
+						this._ActiveHotkeys[main_name] := this._Hotkeys[main_name]._value.keys
 						
 					} else {
 						; does not match.
@@ -393,7 +393,7 @@ class HotClass{
 			this._handler := handler
 			this._Callback := callback
 			this.Name := name
-			this.BindList := {}
+			this._value := {keys: []}
 			
 			Gui, Add, ComboBox, % "hwndhwnd AltSubmit " aParams[1], % this._MenuText
 			this._hwnd := hwnd
@@ -407,11 +407,13 @@ class HotClass{
 		; Set of .value sets hotkey state from Object in BindList format
 		value[]{
 			get {
-				return this.BindList
+				;return this.BindList
+				return this._value
 			}
 			
 			set {
 				return this.SetBinding(value)
+				;return this._value := value
 			}
 		}
 		
@@ -442,12 +444,12 @@ class HotClass{
 				BindList[A_Index].Delete("event")
 			}
 			; Set new value
-			this.BindList := BindList
+			this._value.keys := BindList
 			; Update GuiControl
 			DllCall("User32.dll\SendMessageW", "Ptr", this._hEdit, "Uint", EM_SETCUEBANNER, "Ptr", True, "WStr", this.BuildHumanReadable(BindList))
 			; Fire OnChange callback
 			if (IsObject(this._handler._OnChangeCallback)){
-				this._handler._OnChangeCallback.(this.Name, this.BindList)
+				this._handler._OnChangeCallback.(this.Name, this._value)
 			}
 		}
 		
