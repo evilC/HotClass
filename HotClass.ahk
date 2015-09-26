@@ -307,6 +307,8 @@ class HotClass{
 				}
 			}
 			
+			block := 0
+			
 			; Fire all up event callbacks, then all down event callbacks.
 			Loop 2 {
 				idx := A_Index - 1
@@ -315,6 +317,10 @@ class HotClass{
 					if (state = idx){
 						if (this._HotkeyStates[delta_name] != state){
 							OutputDebug % "CALLBACK " delta_name ": " state
+							if (idx){
+								; down event, decide whether to block
+								block := this._Hotkeys[delta_name]._value.options.Block
+							}
 							this._Hotkeys[delta_name]._Callback.(state)
 							this._HotkeyStates[delta_name] := state
 						}
@@ -324,7 +330,8 @@ class HotClass{
 			; Default to not blocking input
 		}
 		
-		return 0 ; don't block input
+		;return 0 ; don't block input
+		return block
 	}
 	
 	; All of needle must be in haystack
@@ -388,12 +395,12 @@ class HotClass{
 	; Each hotkey is an instance of this class.
 	; Handles the Gui control and routing of callbacks when the hotkey triggers
 	class _Hotkey {
-		static _MenuText := "Select new Binding|UNIMPLEMENTED: Toggle Wild (*) |UNIMPLEMENTED: Toggle PassThrough (~)|Remove Binding"
+		static _MenuText := "Select new Binding|UNIMPLEMENTED: Toggle Wild (*) |Toggle Block|Remove Binding"
 		__New(handler, name, callback, aParams*){
 			this._handler := handler
 			this._Callback := callback
 			this.Name := name
-			this._value := {keys: []}
+			this._value := {options: {Block: 0}, keys: []}
 			
 			Gui, Add, ComboBox, % "hwndhwnd AltSubmit " aParams[1], % this._MenuText
 			this._hwnd := hwnd
@@ -426,10 +433,10 @@ class HotClass{
 				this._handler._ChangeState(this._handler.STATES.BIND, this.Name)
 			} else if (option = 2){
 				; Wild Option Changed
-				this.Wild := !this.Wild
+				;this.Wild := !this.Wild
 			} else if (option = 3){
-				; PassThrough Option Changed
-				this.PassThrough := !this.PassThrough
+				; Block Option Changed
+				this._value.options.Block := !this._value.options.Block
 			} else if (option = 4){
 				; Remove Binding
 				this.SetBinding({})
